@@ -1,0 +1,42 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@radix-ui/react-accordion": "^1.1.2",
+    "@radix-ui/react-checkbox": "^1.0.4",
+    "@radix-ui/react-dialog": "^1.0.5",
+    "@radix-ui/react-dropdown-menu": "^2.0.6",
+    "@radix-ui/react-label": "^2.0.2",
+    "@radix-ui/react-separator": "^1.0.3",
+    "@radix-ui/react-slot": "^1.2.3",
+    "@radix-ui/react-tabs": "^1.0.4",
+    "@radix-ui/react-toast": "^1.1.5",
+    "@vercel/analytics": "^1.2.2",
+    "caniuse-lite": "^1.0.30001735",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
+    "embla-carousel-react": "^8.6.0",
+    "lucide-react": "^0.321.0",
+    "preact": "^10.13.1",
+    "preact-iso": "^2.3.2",
+    "preact-render-to-string": "^6.3.1",
+    "react-dropzone": "^14.3.8",
+    "react-qr-code": "^2.0.12",
+    "simplebar-react": "^3.3.2",
+    "tailwind-merge": "^2.2.1",
+    "tailwindcss-animate": "^1.0.7"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.5.0",
+    "@types/node": "^20.11.16",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.1",
+    "vite": "^4.3.2"
+  }
+}

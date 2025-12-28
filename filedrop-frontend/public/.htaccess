@@ -1,0 +1,24 @@
+# Enable mod_rewrite
+RewriteEngine On
+
+# Handle Angular and React Router
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+
+# MIME types for module scripts
+AddType application/javascript .js .mjs
+AddType text/css .css
+
+# Security headers
+Header always set X-Frame-Options DENY
+Header always set X-XSS-Protection "1; mode=block"
+Header always set X-Content-Type-Options nosniff
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+# Cache static assets
+<FilesMatch "\.(css|js|png|jpg|jpeg|gif|ico|svg)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
