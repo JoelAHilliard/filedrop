@@ -3,6 +3,7 @@ from flask import Flask, Response, request, jsonify, make_response
 from werkzeug.utils import secure_filename
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
 import io
@@ -14,6 +15,13 @@ app = Flask(__name__)
 CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
 app.config['MAX_CONTENT_LENGTH'] = 250 * 1024 * 1024  # 250MB
+
+# Limits for file lifecycle settings
+DEFAULT_TTL_SECONDS = 24 * 60 * 60
+MIN_TTL_SECONDS = 5 * 60
+MAX_TTL_SECONDS = 7 * 24 * 60 * 60
+DEFAULT_MAX_DOWNLOADS = 5
+MAX_DOWNLOADS_LIMIT = 100
 
 # Configure S3 client for Cloudflare R2
 s3_client = boto3.client(
@@ -55,18 +63,48 @@ def generate_access_code(length=4):
     import secrets
     return secrets.token_hex(length)[:length]
 
+def parse_iso_datetime(value):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace('Z', '+00:00')).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+def clamp_int(value, default, min_value=None, max_value=None):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    if min_value is not None and parsed < min_value:
+        return min_value
+    if max_value is not None and parsed > max_value:
+        return max_value
+    return parsed
+
 def delete_old_files():
-    thirty_minutes_ago = datetime.now() - timedelta(minutes=30)
     try:
         response = s3_client.list_objects_v2(Bucket=os.getenv('S3_BUCKET_NAME'))
         if 'Contents' not in response:
             print("No old files to delete.")
             return
-        to_delete = [
-            {'Key': obj['Key']}
-            for obj in response['Contents']
-            if obj['LastModified'].replace(tzinfo=None) < thirty_minutes_ago
-        ]
+        now = datetime.utcnow()
+        to_delete = []
+        for obj in response['Contents']:
+            key = obj['Key']
+            try:
+                head = s3_client.head_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=key)
+                metadata = head.get('Metadata', {})
+                created_at = parse_iso_datetime(metadata.get('created_at'))
+                ttl_seconds = clamp_int(metadata.get('ttl_seconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
+                if not created_at:
+                    created_at = obj['LastModified'].replace(tzinfo=None)
+                expires_at = created_at + timedelta(seconds=ttl_seconds)
+                remaining_downloads = clamp_int(metadata.get('remaining_downloads'), DEFAULT_MAX_DOWNLOADS, 0, MAX_DOWNLOADS_LIMIT)
+                if remaining_downloads <= 0 or now >= expires_at:
+                    to_delete.append({'Key': key})
+            except Exception as e:
+                print(f"Error checking file {key}: {e}")
         if to_delete:
             s3_client.delete_objects(
                 Bucket=os.getenv('S3_BUCKET_NAME'),
@@ -116,6 +154,8 @@ def upload_file():
     file_type = request.form.get('type')
     iv = request.form.get('iv')  # Provided from client (Base64)
     salt = request.form.get('salt')  # Provided from client (Base64)
+    ttl_seconds = clamp_int(request.form.get('ttlSeconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
+    max_downloads = clamp_int(request.form.get('maxDownloads'), DEFAULT_MAX_DOWNLOADS, 1, MAX_DOWNLOADS_LIMIT)
     
     if not file or not secret_word or not iv or not salt:
         return jsonify({'error': 'Missing file, secret word, iv or salt'}), 400
@@ -131,6 +171,8 @@ def upload_file():
     
     access_code = generate_access_code()
     extension = secure_filename(file.filename).rsplit('.', 1)[-1] if '.' in file.filename else 'bin'
+    created_at = datetime.utcnow()
+    expires_at = created_at + timedelta(seconds=ttl_seconds)
     
     s3_client.put_object(
         Bucket=os.getenv('S3_BUCKET_NAME'),
@@ -142,11 +184,22 @@ def upload_file():
             'filetype': file_type or 'unknown',
             'iv': iv,
             'salt': salt,
-            'extension': extension
+            'extension': extension,
+            'created_at': created_at.isoformat() + 'Z',
+            'ttl_seconds': str(ttl_seconds),
+            'expires_at': expires_at.isoformat() + 'Z',
+            'max_downloads': str(max_downloads),
+            'remaining_downloads': str(max_downloads)
         }
     )
     
-    return jsonify({'message': 'File uploaded successfully', 'key': access_code})
+    return jsonify({
+        'message': 'File uploaded successfully',
+        'key': access_code,
+        'expiresAt': expires_at.isoformat() + 'Z',
+        'maxDownloads': max_downloads,
+        'ttlSeconds': ttl_seconds
+    })
 
 @app.route('/retrieve', methods=['GET'])
 def retrieve_file():
@@ -163,17 +216,61 @@ def retrieve_file():
     try:
         s3_response = s3_client.get_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
         encrypted_data = s3_response['Body'].read()
-        metadata = s3_response['Metadata']
-        print(f"Metadata: {metadata}")  # Debug log
+        metadata = s3_response.get('Metadata', {})
         iv = metadata.get('iv', '').replace(' ', '+')
         salt = metadata.get('salt', '').replace(' ', '+')
+        created_at = parse_iso_datetime(metadata.get('created_at'))
+        ttl_seconds = clamp_int(metadata.get('ttl_seconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
+        expires_at = parse_iso_datetime(metadata.get('expires_at'))
+        if not created_at:
+            created_at = s3_response.get('LastModified', datetime.utcnow()).replace(tzinfo=None)
+        if not expires_at:
+            expires_at = created_at + timedelta(seconds=ttl_seconds)
+        remaining_downloads = clamp_int(metadata.get('remaining_downloads'), DEFAULT_MAX_DOWNLOADS, 0, MAX_DOWNLOADS_LIMIT)
+        max_downloads = clamp_int(metadata.get('max_downloads'), DEFAULT_MAX_DOWNLOADS, 1, MAX_DOWNLOADS_LIMIT)
+
+        if datetime.utcnow() >= expires_at:
+            s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
+            return jsonify({'error': 'File expired.'}), 410
+
+        if remaining_downloads <= 0:
+            s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
+            return jsonify({'error': 'Download limit reached.'}), 410
 
         response = Response(encrypted_data, mimetype='application/octet-stream')
         response.headers['X-IV'] = iv
         response.headers['X-SALT'] = salt
         response.headers['X-EXTENSION'] = metadata.get('extension', 'bin')
-        response.headers['Access-Control-Expose-Headers'] = 'X-IV, X-SALT, X-EXTENSION'
+        response.headers['X-EXPIRES-AT'] = expires_at.isoformat() + 'Z'
+        response.headers['X-REMAINING-DOWNLOADS'] = str(max(remaining_downloads - 1, 0))
+        response.headers['X-MAX-DOWNLOADS'] = str(max_downloads)
+        response.headers['Access-Control-Expose-Headers'] = 'X-IV, X-SALT, X-EXTENSION, X-EXPIRES-AT, X-REMAINING-DOWNLOADS, X-MAX-DOWNLOADS'
+
+        if remaining_downloads <= 1:
+            s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
+        else:
+            updated_metadata = dict(metadata)
+            updated_metadata['remaining_downloads'] = str(remaining_downloads - 1)
+            updated_metadata['max_downloads'] = str(max_downloads)
+            updated_metadata['created_at'] = (created_at.isoformat() + 'Z') if created_at else metadata.get('created_at', '')
+            updated_metadata['ttl_seconds'] = str(ttl_seconds)
+            updated_metadata['expires_at'] = expires_at.isoformat() + 'Z'
+            s3_client.copy_object(
+                Bucket=os.getenv('S3_BUCKET_NAME'),
+                Key=access_code,
+                CopySource={'Bucket': os.getenv('S3_BUCKET_NAME'), 'Key': access_code},
+                Metadata=updated_metadata,
+                MetadataDirective='REPLACE',
+                ContentType=s3_response.get('ContentType', 'application/octet-stream'),
+                ServerSideEncryption='AES256'
+            )
+
         return response
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') == 'NoSuchKey':
+            return jsonify({'error': 'File not found.'}), 404
+        print(f"Error: {e}")
+        return Response("Server error", status=500)
     except Exception as e:
         print(f"Error: {e}")
         return Response("Server error", status=500)

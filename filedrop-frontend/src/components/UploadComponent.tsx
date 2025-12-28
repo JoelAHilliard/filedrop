@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, Copy, File, Upload, FileText, RefreshCw, CheckCircle, Info, Shield, Eye, EyeOff } from 'lucide-react';
+import { AlertTriangle, Copy, File, Upload, FileText, RefreshCw, CheckCircle, Info, Shield, Eye, EyeOff, Timer, Download as DownloadIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import QRCode from "react-qr-code";
@@ -10,13 +10,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { encryptData, arrayBufferToBase64, str2ab, formatFileSize } from '@/utils/crypto';
 import FileDropZone from '@/components/FileDropZone';
+import { Checkbox } from '@/components/ui/checkbox';
 
 interface UploadComponentProps {
     wordList: string[];
 }
 
 export default function UploadComponent({ wordList }: UploadComponentProps) {
-    const URL = "https://dropit-backend-production.up.railway.app/";
+    const URL = "https://fd.up.railway.app";
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [givenAccessCode, setGivenAccessCode] = useState('');
     const [inputText, setInputText] = useState('');
@@ -26,6 +27,10 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
     const [showSecretWord, setShowSecretWord] = useState(false);
     const [fileSize, setFileSize] = useState(0);
     const [uploadComplete, setUploadComplete] = useState(false);
+    const [maxDownloads, setMaxDownloads] = useState(5);
+    const [ttlHours, setTtlHours] = useState(24);
+    const [burnAfterRead, setBurnAfterRead] = useState(false);
+    const [expiresAt, setExpiresAt] = useState('');
 
     const { toast } = useToast();
 
@@ -45,12 +50,14 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
         setSelectedFile(null);
         setInputText('');
         setFileSize(0);
+        setExpiresAt('');
     };
 
     const handleUpload = async (event: any) => {
         event.preventDefault();
         setLoading(true);
         setUploadComplete(false);
+        setExpiresAt('');
 
         const index = Math.floor(Math.random() * wordList.length);
         const sw = wordList[index].replace("\r","");
@@ -79,12 +86,16 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             setFileSize(buffer.byteLength);
             
             const { encryptedBuffer, iv, salt } = await encryptData(buffer, sw);
+            const downloadsLimit = burnAfterRead ? 1 : maxDownloads;
+            const ttlSeconds = Math.max(1, ttlHours) * 3600;
             const formData = new FormData();
             formData.append('file', new Blob([encryptedBuffer]), 'file.txt');
             formData.append('type', 'text/plain');
             formData.append('secretWord', sw);
             formData.append('iv', arrayBufferToBase64(iv));
             formData.append('salt', arrayBufferToBase64(salt));
+            formData.append('maxDownloads', String(downloadsLimit));
+            formData.append('ttlSeconds', String(ttlSeconds));
     
             try {
                 const response = await fetch(`${URL}/upload`, {
@@ -96,6 +107,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                     setGivenAccessCode(data.key);
                     setSecretWord(sw);
                     setUploadComplete(true);
+                    setExpiresAt(data.expiresAt || '');
                     
                     toast({
                         title: "Upload Successful",
@@ -144,12 +156,16 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             let fileData = await selectedFile.arrayBuffer();
             
             const { encryptedBuffer, iv, salt } = await encryptData(fileData, sw);
+            const downloadsLimit = burnAfterRead ? 1 : maxDownloads;
+            const ttlSeconds = Math.max(1, ttlHours) * 3600;
             const formData = new FormData();
             formData.append('file', new Blob([encryptedBuffer]), selectedFile.name);
             formData.append('type', selectedFile.type);
             formData.append('secretWord', sw);
             formData.append('iv', arrayBufferToBase64(iv));
             formData.append('salt', arrayBufferToBase64(salt));
+            formData.append('maxDownloads', String(downloadsLimit));
+            formData.append('ttlSeconds', String(ttlSeconds));
     
             try {
                 const response = await fetch(`${URL}/upload`, {
@@ -161,6 +177,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                     setGivenAccessCode(data.key);
                     setSecretWord(sw);
                     setUploadComplete(true);
+                    setExpiresAt(data.expiresAt || '');
                     
                     toast({
                         title: "Upload Successful",
@@ -268,6 +285,68 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                             )}
                         </div>
                     )}
+
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-medium">Access Controls</h3>
+                                <p className="text-xs text-gray-500">Set expiry and download limits before upload.</p>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-500">
+                                <Timer className="w-4 h-4" />
+                                <span>{ttlHours}h TTL</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="ttl-hours" className="text-sm">Expiry (hours)</Label>
+                                <Input
+                                    id="ttl-hours"
+                                    type="number"
+                                    min={1}
+                                    max={168}
+                                    value={ttlHours}
+                                    onChange={(e: any) => {
+                                        const nextValue = Number(e.target.value);
+                                        if (!Number.isFinite(nextValue)) {
+                                            setTtlHours(1);
+                                            return;
+                                        }
+                                        setTtlHours(Math.max(1, Math.min(168, nextValue)));
+                                    }}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="max-downloads" className="text-sm">Max downloads</Label>
+                                <Input
+                                    id="max-downloads"
+                                    type="number"
+                                    min={1}
+                                    max={100}
+                                    value={burnAfterRead ? 1 : maxDownloads}
+                                    disabled={burnAfterRead}
+                                    onChange={(e: any) => {
+                                        const nextValue = Number(e.target.value);
+                                        if (!Number.isFinite(nextValue)) {
+                                            setMaxDownloads(1);
+                                            return;
+                                        }
+                                        setMaxDownloads(Math.max(1, Math.min(100, nextValue)));
+                                    }}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <Checkbox
+                                id="burn-after-read"
+                                checked={burnAfterRead}
+                                onCheckedChange={(value) => setBurnAfterRead(Boolean(value))}
+                            />
+                            <Label htmlFor="burn-after-read" className="text-sm">
+                                Burn after first download
+                            </Label>
+                        </div>
+                    </div>
 
                     {loading && (
                         <div className="flex items-center justify-center py-8">
@@ -384,6 +463,21 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 </Button>
                             </div>
 
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-center space-y-1">
+                                    <DownloadIcon className="w-4 h-4 mx-auto text-gray-500" />
+                                    <p className="text-xs font-medium">Max downloads</p>
+                                    <p className="text-xs text-gray-500">{burnAfterRead ? 1 : maxDownloads}</p>
+                                </div>
+                                <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-center space-y-1">
+                                    <Timer className="w-4 h-4 mx-auto text-gray-500" />
+                                    <p className="text-xs font-medium">Expires</p>
+                                    <p className="text-xs text-gray-500">
+                                        {expiresAt ? new Date(expiresAt).toLocaleString() : `${ttlHours} hours`}
+                                    </p>
+                                </div>
+                            </div>
+
                             <div className="flex flex-col items-center justify-center space-y-4 bg-gray-50 dark:bg-gray-900 rounded-lg p-6">
                                 <div className="bg-white p-3 rounded border">
                                     <QRCode 
@@ -426,17 +520,17 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                             </p>
                         </div>
                         <div className="text-center space-y-2">
-                            <FileText className="w-6 h-6 mx-auto text-gray-600" />
-                            <h3 className="font-medium text-sm">Auto-Delete</h3>
+                            <Timer className="w-6 h-6 mx-auto text-gray-600" />
+                            <h3 className="font-medium text-sm">Custom TTL</h3>
                             <p className="text-xs text-gray-500">
-                                24 hour expiry
+                                Expire on your schedule
                             </p>
                         </div>
                         <div className="text-center space-y-2">
-                            <Eye className="w-6 h-6 mx-auto text-gray-600" />
-                            <h3 className="font-medium text-sm">Zero Knowledge</h3>
+                            <DownloadIcon className="w-6 h-6 mx-auto text-gray-600" />
+                            <h3 className="font-medium text-sm">Download Limits</h3>
                             <p className="text-xs text-gray-500">
-                                Server cannot decrypt
+                                Control access frequency
                             </p>
                         </div>
                     </div>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_URL="https://dropit-backend-production.up.railway.app"
+DEFAULT_URL="https://fd.up.railway.app"
 WORDLIST_PATH="filedrop-frontend/public/bip39.txt"
 
 usage() {

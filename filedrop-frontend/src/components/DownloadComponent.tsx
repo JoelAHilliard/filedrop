@@ -15,6 +15,9 @@ interface DownloadedFileInfo {
     extension: string;
     downloadTime: string;
     isText: boolean;
+    remainingDownloads?: number;
+    maxDownloads?: number;
+    expiresAt?: string;
 }
 
 interface DownloadComponentProps {
@@ -24,7 +27,7 @@ interface DownloadComponentProps {
 }
 
 export default function DownloadComponent({ initialAccessCode = '', initialSecretWord = '', onFileRetrieved }: DownloadComponentProps) {
-    const URL = "https://dropit-backend-production.up.railway.app/";
+    const URL = "https://fd.up.railway.app";
     const [takenAccessCode, setTakenAccessCode] = useState(initialAccessCode);
     const [takenSecretWord, setTakenSecretWord] = useState(initialSecretWord);
     const [loading, setLoading] = useState(false);
@@ -56,6 +59,9 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 const ivB64 = response.headers.get('X-IV');
                 const saltB64 = response.headers.get('X-SALT');
                 const extension = response.headers.get('X-EXTENSION') || 'bin';
+                const remainingDownloadsHeader = response.headers.get('X-REMAINING-DOWNLOADS');
+                const maxDownloadsHeader = response.headers.get('X-MAX-DOWNLOADS');
+                const expiresAtHeader = response.headers.get('X-EXPIRES-AT');
                 
                 if (!ivB64 || !saltB64) {
                     throw new Error("Missing encryption parameters");
@@ -73,7 +79,10 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     size: decryptedBuffer.byteLength,
                     extension: extension,
                     downloadTime: new Date().toLocaleString(),
-                    isText: extension === 'txt'
+                    isText: extension === 'txt',
+                    remainingDownloads: remainingDownloadsHeader ? Number(remainingDownloadsHeader) : undefined,
+                    maxDownloads: maxDownloadsHeader ? Number(maxDownloadsHeader) : undefined,
+                    expiresAt: expiresAtHeader || undefined
                 };
                 
                 if (extension === 'txt') {
@@ -259,6 +268,24 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 </p>
                             </div>
                         </div>
+                        {(downloadedFileInfo.remainingDownloads !== undefined || downloadedFileInfo.expiresAt) && (
+                            <div className="grid grid-cols-2 gap-4 mt-4">
+                                <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
+                                    <Shield className="w-4 h-4 mx-auto text-gray-600" />
+                                    <p className="text-xs font-medium">Downloads left</p>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                        {downloadedFileInfo.remainingDownloads ?? '—'} / {downloadedFileInfo.maxDownloads ?? '—'}
+                                    </p>
+                                </div>
+                                <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
+                                    <CheckCircle className="w-4 h-4 mx-auto text-gray-600" />
+                                    <p className="text-xs font-medium">Expires</p>
+                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                        {downloadedFileInfo.expiresAt ? new Date(downloadedFileInfo.expiresAt).toLocaleString() : '—'}
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             )}
