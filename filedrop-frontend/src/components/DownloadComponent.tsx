@@ -30,12 +30,28 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const URL = "https://fd.up.railway.app";
     const [takenAccessCode, setTakenAccessCode] = useState(initialAccessCode);
     const [takenSecretWord, setTakenSecretWord] = useState(initialSecretWord);
+    const [fileBaseName, setFileBaseName] = useState('file');
     const [loading, setLoading] = useState(false);
     const [displayText, setDisplayText] = useState("");
     const [downloadComplete, setDownloadComplete] = useState(false);
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
 
     const { toast } = useToast();
+
+    const isLikelyUrl = (value: string) => {
+        const trimmed = value.trim().toLowerCase();
+        return trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('www.');
+    };
+
+    const normalizeFileBase = (value: string) => {
+        const trimmed = value.trim();
+        if (!trimmed || isLikelyUrl(trimmed)) {
+            return 'file';
+        }
+        const withoutPath = trimmed.split(/[\\/]/).pop() || '';
+        const withoutExt = withoutPath.replace(/\.[^.]+$/, '');
+        return withoutExt || 'file';
+    };
 
     const handleRetrieveFile = async (accessCode?: string, sw?: string) => {
         let code = accessCode ? accessCode : takenAccessCode;
@@ -73,8 +89,10 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
 
                 const decryptedBuffer = await decryptData(encryptedBuffer, secW, iv, salt);
                 
+                const resolvedBaseName = normalizeFileBase(fileBaseName);
+                const resolvedFileName = extension === 'txt' ? `file.${extension}` : `${resolvedBaseName}.${extension}`;
                 const downloadInfo: DownloadedFileInfo = {
-                    fileName: `file.${extension}`,
+                    fileName: resolvedFileName,
                     fileType: extension === 'txt' ? 'Text Document' : 'Binary File',
                     size: decryptedBuffer.byteLength,
                     extension: extension,
@@ -96,7 +114,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     const a = document.createElement('a');
                     a.style.display = 'none';
                     a.href = url;
-                    a.download = `file.${extension}`;
+                    a.download = resolvedFileName;
                     a.target = '_blank';
                     document.body.appendChild(a);
                     a.click();
@@ -171,6 +189,18 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 className="font-mono"
                             />
                         </div>
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="file-name" className="font-medium">File name</Label>
+                        <Input
+                            id="file-name"
+                            value={fileBaseName}
+                            placeholder="file"
+                            onChange={(e) => setFileBaseName(normalizeFileBase((e.target as HTMLInputElement).value))}
+                        />
+                        <p className="text-xs text-gray-500">
+                            URLs are ignored and default to "file".
+                        </p>
                     </div>
 
                     {loading && (

@@ -294,17 +294,17 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                             </div>
                             <div className="flex items-center gap-2 text-xs text-gray-500">
                                 <Timer className="w-4 h-4" />
-                                <span>{ttlHours}h TTL</span>
+                                <span>{ttlHours >= 24 ? `${ttlHours / 24}d` : `${ttlHours}h`} TTL</span>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="ttl-hours" className="text-sm">Expiry (hours)</Label>
+                                <Label htmlFor="ttl-hours" className="text-sm">Expiry (hours, max 3 days)</Label>
                                 <Input
                                     id="ttl-hours"
                                     type="number"
                                     min={1}
-                                    max={168}
+                                    max={72}
                                     value={ttlHours}
                                     onChange={(e: any) => {
                                         const nextValue = Number(e.target.value);
@@ -312,7 +312,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                             setTtlHours(1);
                                             return;
                                         }
-                                        setTtlHours(Math.max(1, Math.min(168, nextValue)));
+                                        setTtlHours(Math.max(1, Math.min(72, nextValue)));
                                     }}
                                 />
                             </div>
@@ -473,7 +473,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                     <Timer className="w-4 h-4 mx-auto text-gray-500" />
                                     <p className="text-xs font-medium">Expires</p>
                                     <p className="text-xs text-gray-500">
-                                        {expiresAt ? new Date(expiresAt).toLocaleString() : `${ttlHours} hours`}
+                                        {expiresAt ? new Date(expiresAt).toLocaleString() : `${ttlHours} hours (max 3 days)`}
                                     </p>
                                 </div>
                             </div>
@@ -523,7 +523,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                             <Timer className="w-6 h-6 mx-auto text-gray-600" />
                             <h3 className="font-medium text-sm">Custom TTL</h3>
                             <p className="text-xs text-gray-500">
-                                Expire on your schedule
+                                Up to 3 days
                             </p>
                         </div>
                         <div className="text-center space-y-2">
