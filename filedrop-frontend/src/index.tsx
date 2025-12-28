@@ -17,7 +17,6 @@ import {
 	AccordionItem,
 	AccordionTrigger,
   } from "@/components/ui/accordion"
-  import { Analytics } from "@vercel/analytics/react"
 
 export function App() {
 	const [showBeginnerPopup, setShowBeginnerPopup] = useState(true);
@@ -98,7 +97,6 @@ export function App() {
 render(
 	<>
 		<App />
-		<Analytics />
 	</>,
 	document.getElementById('app')
 );

@@ -29,7 +29,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
     const [uploadComplete, setUploadComplete] = useState(false);
     const [maxDownloads, setMaxDownloads] = useState(5);
     const [ttlHours, setTtlHours] = useState(24);
-    const [burnAfterRead, setBurnAfterRead] = useState(false);
+    const [burnAfterRead, setBurnAfterRead] = useState(true);
     const [expiresAt, setExpiresAt] = useState('');
 
     const { toast } = useToast();

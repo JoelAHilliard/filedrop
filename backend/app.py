@@ -1,12 +1,11 @@
 import os
-from flask import Flask, Response, request, jsonify, make_response
+from flask import Flask, Response, request, jsonify
 from werkzeug.utils import secure_filename
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
-import io
 from flask_cors import CORS
 from dotenv import load_dotenv
 load_dotenv()
@@ -20,7 +19,7 @@ app.config['MAX_CONTENT_LENGTH'] = 250 * 1024 * 1024  # 250MB
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
 MIN_TTL_SECONDS = 5 * 60
 MAX_TTL_SECONDS = 3 * 24 * 60 * 60
-DEFAULT_MAX_DOWNLOADS = 5
+DEFAULT_MAX_DOWNLOADS = 1
 MAX_DOWNLOADS_LIMIT = 100
 
 # Configure S3 client for Cloudflare R2
