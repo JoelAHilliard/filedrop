@@ -1,0 +1,279 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+DEFAULT_URL="https://dropit-backend-production.up.railway.app"
+WORDLIST_PATH="filedrop-frontend/public/bip39.txt"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  filedrop <filePath> [--secret <word>] [--url <baseUrl>] [--type <mime>]
+  filedrop download <accessCode> <secretWord> [--out <filePath>] [--url <baseUrl>]
+
+Examples:
+  filedrop ./photo.jpg
+  filedrop ./report.pdf --secret myword
+  filedrop download ab12 secretword --out ./report.pdf
+EOF
+}
+
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || {
+    echo "Missing required command: $1" >&2
+    exit 1
+  }
+}
+
+normalize_url() {
+  echo "${1%/}"
+}
+
+pick_secret_word() {
+  local explicit="$1"
+  if [[ -n "$explicit" ]]; then
+    echo "$explicit"
+    return
+  fi
+  if [[ -f "$WORDLIST_PATH" ]]; then
+    python3 - <<'PY' "$WORDLIST_PATH"
+import random, sys
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8') as f:
+    words = [w.strip() for w in f.read().splitlines() if w.strip()]
+print(random.choice(words) if words else "")
+PY
+  else
+    python3 - <<'PY'
+import secrets
+print(secrets.token_hex(4))
+PY
+  fi
+}
+
+hex_to_b64() {
+  python3 - <<'PY' "$1"
+import base64, binascii, sys
+data = binascii.unhexlify(sys.argv[1])
+print(base64.b64encode(data).decode())
+PY
+}
+
+b64_to_hex() {
+  python3 - <<'PY' "$1"
+import base64, binascii, sys
+data = base64.b64decode(sys.argv[1])
+print(binascii.hexlify(data).decode())
+PY
+}
+
+derive_key_hex() {
+  python3 - <<'PY' "$1" "$2"
+import binascii, hashlib, sys
+secret = sys.argv[1].encode()
+salt = binascii.unhexlify(sys.argv[2])
+key = hashlib.pbkdf2_hmac('sha256', secret, salt, 100000, dklen=32)
+print(binascii.hexlify(key).decode())
+PY
+}
+
+detect_mime_type() {
+  local file_path="$1"
+  if command -v file >/dev/null 2>&1; then
+    file --mime-type -b "$file_path" 2>/dev/null || echo "application/octet-stream"
+  else
+    echo "application/octet-stream"
+  fi
+}
+
+upload_file() {
+  local file_path="$1"
+  local secret_word="$2"
+  local url="$3"
+  local mime_type="$4"
+
+  local salt_hex
+  local iv_hex
+  salt_hex=$(openssl rand -hex 16)
+  iv_hex=$(openssl rand -hex 16)
+
+  local key_hex
+  key_hex=$(derive_key_hex "$secret_word" "$salt_hex")
+
+  local tmp_enc
+  tmp_enc=$(mktemp)
+  openssl enc -aes-256-cbc -K "$key_hex" -iv "$iv_hex" -in "$file_path" -out "$tmp_enc"
+
+  local iv_b64
+  local salt_b64
+  iv_b64=$(hex_to_b64 "$iv_hex")
+  salt_b64=$(hex_to_b64 "$salt_hex")
+
+  local response
+  response=$(curl -sS -w '\n%{http_code}' \
+    -F "file=@${tmp_enc};filename=$(basename "$file_path")" \
+    -F "type=${mime_type}" \
+    -F "secretWord=${secret_word}" \
+    -F "iv=${iv_b64}" \
+    -F "salt=${salt_b64}" \
+    "${url}/upload")
+
+  rm -f "$tmp_enc"
+
+  local body
+  local status
+  body="${response%$'\n'*}"
+  status="${response##*$'\n'}"
+  if [[ "$status" != "200" ]]; then
+    echo "Upload failed (${status}): ${body}" >&2
+    exit 1
+  fi
+
+  python3 - <<'PY' "$body" "$secret_word"
+import json, sys
+data = json.loads(sys.argv[1])
+print(f"Access code: {data.get('key', '')}")
+print(f"Secret word: {sys.argv[2]}")
+PY
+}
+
+download_file() {
+  local access_code="$1"
+  local secret_word="$2"
+  local url="$3"
+  local out_path="$4"
+
+  local tmp_headers
+  local tmp_enc
+  tmp_headers=$(mktemp)
+  tmp_enc=$(mktemp)
+
+  local status
+  status=$(curl -sS -o "$tmp_enc" -D "$tmp_headers" -w "%{http_code}" \
+    "${url}/retrieve?accessCode=${access_code}")
+
+  if [[ "$status" != "200" ]]; then
+    echo "Download failed (${status}):" >&2
+    cat "$tmp_enc" >&2
+    rm -f "$tmp_headers" "$tmp_enc"
+    exit 1
+  fi
+
+  local iv_b64
+  local salt_b64
+  local extension
+  iv_b64=$(awk -F': ' 'tolower($1)=="x-iv"{print $2}' "$tmp_headers" | tr -d '\r')
+  salt_b64=$(awk -F': ' 'tolower($1)=="x-salt"{print $2}' "$tmp_headers" | tr -d '\r')
+  extension=$(awk -F': ' 'tolower($1)=="x-extension"{print $2}' "$tmp_headers" | tr -d '\r')
+  extension=${extension:-bin}
+
+  if [[ -z "$iv_b64" || -z "$salt_b64" ]]; then
+    echo "Missing encryption headers in response." >&2
+    rm -f "$tmp_headers" "$tmp_enc"
+    exit 1
+  fi
+
+  local iv_hex
+  local salt_hex
+  iv_hex=$(b64_to_hex "$iv_b64")
+  salt_hex=$(b64_to_hex "$salt_b64")
+
+  local key_hex
+  key_hex=$(derive_key_hex "$secret_word" "$salt_hex")
+
+  local final_path="$out_path"
+  if [[ -z "$final_path" ]]; then
+    final_path="filedrop-${access_code}.${extension}"
+  fi
+
+  openssl enc -d -aes-256-cbc -K "$key_hex" -iv "$iv_hex" -in "$tmp_enc" -out "$final_path"
+
+  rm -f "$tmp_headers" "$tmp_enc"
+  echo "Saved to ${final_path}"
+}
+
+main() {
+  require_cmd openssl
+  require_cmd curl
+  require_cmd python3
+
+  if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
+    usage
+    exit 0
+  fi
+
+  local cmd="$1"
+  shift || true
+
+  if [[ "$cmd" == "download" || "$cmd" == "get" ]]; then
+    if [[ $# -lt 2 ]]; then
+      usage
+      exit 1
+    fi
+    local access_code="$1"
+    local secret_word="$2"
+    shift 2
+    local out_path=""
+    local url="$DEFAULT_URL"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --out)
+          out_path="$2"
+          shift 2
+          ;;
+        --url)
+          url="$2"
+          shift 2
+          ;;
+        *)
+          echo "Unknown option: $1" >&2
+          exit 1
+          ;;
+      esac
+    done
+    download_file "$access_code" "$secret_word" "$(normalize_url "$url")" "$out_path"
+    exit 0
+  fi
+
+  local file_path="$cmd"
+  if [[ ! -f "$file_path" ]]; then
+    echo "File not found: $file_path" >&2
+    exit 1
+  fi
+
+  local secret_word=""
+  local url="$DEFAULT_URL"
+  local mime_type=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --secret)
+        secret_word="$2"
+        shift 2
+        ;;
+      --url)
+        url="$2"
+        shift 2
+        ;;
+      --type)
+        mime_type="$2"
+        shift 2
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  secret_word=$(pick_secret_word "$secret_word")
+  if [[ -z "$secret_word" ]]; then
+    echo "Unable to determine secret word." >&2
+    exit 1
+  fi
+  if [[ -z "$mime_type" ]]; then
+    mime_type=$(detect_mime_type "$file_path")
+  fi
+
+  upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type"
+}
+
+main "$@"
