@@ -31,6 +31,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
     const [ttlHours, setTtlHours] = useState(24);
     const [burnAfterRead, setBurnAfterRead] = useState(true);
     const [expiresAt, setExpiresAt] = useState('');
+    const [dropzoneKey, setDropzoneKey] = useState(0);
 
     const { toast } = useToast();
 
@@ -40,6 +41,13 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             const file = files[0];
             setSelectedFile(file);
             setFileSize(file.size);
+            // Reset upload state when a new file is selected
+            if (uploadComplete) {
+                setUploadComplete(false);
+                setGivenAccessCode('');
+                setSecretWord('');
+                setExpiresAt('');
+            }
         }
     };
 
@@ -51,6 +59,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
         setInputText('');
         setFileSize(0);
         setExpiresAt('');
+        setDropzoneKey(prev => prev + 1); // Force dropzone reset
     };
 
     const handleUpload = async (event: any) => {
@@ -226,7 +235,16 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                         <Button 
                             variant="outline" 
                             size="sm" 
-                            onClick={() => setUploadFile(!uploadFile)}
+                            onClick={() => {
+                                setUploadFile(!uploadFile);
+                                // Reset upload state when switching modes
+                                if (uploadComplete) {
+                                    setUploadComplete(false);
+                                    setGivenAccessCode('');
+                                    setSecretWord('');
+                                    setExpiresAt('');
+                                }
+                            }}
                         >
                             <RefreshCw className="w-4 h-4 mr-2" />
                             {uploadFile ? "Text" : "File"}
@@ -235,30 +253,16 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {uploadFile ? (
-                        selectedFile ? (
-                            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center min-h-[200px] flex flex-col justify-center">
-                                <div className="space-y-4">
-                                    <File className="w-12 h-12 mx-auto text-gray-500" />
-                                    <div className="space-y-2">
-                                        <p className="font-medium break-all">
-                                            {selectedFile.name}
-                                        </p>
-                                        <p className="text-sm text-gray-500">
-                                            {formatFileSize(selectedFile.size)}
-                                        </p>
-                                    </div>
-                                    <Button 
-                                        variant="outline" 
-                                        size="sm"
-                                        onClick={() => setSelectedFile(null)}
-                                    >
-                                        Change File
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            <FileDropZone onChange={handleDropZoneChange} />
-                        )
+                        <FileDropZone 
+                            onChange={handleDropZoneChange} 
+                            resetKey={dropzoneKey}
+                            selectedFile={selectedFile}
+                            onRemoveFile={() => {
+                                setSelectedFile(null);
+                                setDropzoneKey(prev => prev + 1);
+                            }}
+                            formatFileSize={formatFileSize}
+                        />
                     ) : (
                         <div className="space-y-4">
                             <div>
