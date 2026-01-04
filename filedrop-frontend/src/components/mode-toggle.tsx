@@ -35,10 +35,6 @@ export function ModeToggle() {
           Dark
           {theme === "dark" && <Check className="h-4 w-4" />}
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("desert")} className="flex justify-between">
-          Desert
-          {theme === "desert" && <Check className="h-4 w-4" />}
-        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => setTheme("system")} className="flex justify-between">
           System
           {theme === "system" && <Check className="h-4 w-4" />}

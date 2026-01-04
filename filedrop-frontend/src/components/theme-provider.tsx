@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createContext, useContext, useEffect, useState } from "react"
 
-export type Theme = "light" | "dark" | "desert" | "system"
+export type Theme = "light" | "dark" | "system"
 
 interface ThemeProviderState {
   theme: Theme
@@ -37,7 +37,7 @@ export function ThemeProvider({
   useEffect(() => {
     const root = window.document.documentElement
 
-    root.classList.remove("light", "dark", "desert")
+    root.classList.remove("light", "dark")
 
     if (theme === "system") {
       const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
