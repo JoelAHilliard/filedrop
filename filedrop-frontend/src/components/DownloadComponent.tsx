@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Download, File, FileText, CheckCircle, Copy, Shield, Image as ImageIcon } from 'lucide-react';
+import { Download, File, FileText, CheckCircle, Copy, Shield, Image as ImageIcon, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -37,6 +37,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
     const [previewKind, setPreviewKind] = useState<'image' | 'pdf' | 'none'>('none');
+    const [previewBlurred, setPreviewBlurred] = useState(true);
 
     const { toast } = useToast();
 
@@ -103,6 +104,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         setDisplayText("");
         setDownloadedFileInfo(null);
         setPreviewKind('none');
+        setPreviewBlurred(true);
         setDownloadUrl((currentUrl) => {
             if (currentUrl) {
                 window.URL.revokeObjectURL(currentUrl);
@@ -163,6 +165,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     const url = window.URL.createObjectURL(blob);
                     setPreviewKind(previewType);
                     setDownloadUrl(url);
+                    setPreviewBlurred(true);
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
@@ -310,7 +313,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 </Card>
             )}
 
-            {downloadComplete && downloadedFileInfo && !downloadedFileInfo.isText && (
+            {downloadComplete && downloadedFileInfo && !downloadedFileInfo.isText && previewKind !== 'none' && downloadUrl && (
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
@@ -318,41 +321,57 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 {previewKind === 'image' ? <ImageIcon className="w-5 h-5" /> : <File className="w-5 h-5" />}
                                 Preview
                             </CardTitle>
-                            <Button
-                                size="sm"
-                                onClick={handleDownloadFile}
-                                disabled={!downloadUrl}
-                            >
-                                <Download className="w-4 h-4 mr-2" />
-                                Download
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setPreviewBlurred((current) => !current)}
+                                >
+                                    {previewBlurred ? <Eye className="w-4 h-4 mr-2" /> : <EyeOff className="w-4 h-4 mr-2" />}
+                                    {previewBlurred ? 'Reveal' : 'Blur'}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleDownloadFile}
+                                    disabled={!downloadUrl}
+                                >
+                                    <Download className="w-4 h-4 mr-2" />
+                                    Download
+                                </Button>
+                            </div>
                         </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                        {previewKind === 'image' && downloadUrl && (
-                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
+                        {previewKind === 'image' && (
+                            <div className="relative rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4 overflow-hidden">
                                 <img
                                     src={downloadUrl}
                                     alt={downloadedFileInfo.fileName}
-                                    className="max-h-[480px] w-full object-contain rounded-md"
+                                    className={`max-h-[480px] w-full object-contain rounded-md transition duration-300 ${previewBlurred ? 'blur-md' : 'blur-0'}`}
                                 />
+                                {previewBlurred && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-black/50">
+                                        <span className="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                                            Preview blurred
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         )}
-                        {previewKind === 'pdf' && downloadUrl && (
-                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                        {previewKind === 'pdf' && (
+                            <div className="relative rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
                                 <iframe
                                     src={downloadUrl}
                                     title={downloadedFileInfo.fileName}
-                                    className="w-full h-[520px] bg-white"
+                                    className={`w-full h-[520px] bg-white transition duration-300 ${previewBlurred ? 'blur-md pointer-events-none' : 'blur-0'}`}
                                 />
-                            </div>
-                        )}
-                        {previewKind === 'none' && (
-                            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-8 text-center space-y-2">
-                                <File className="w-6 h-6 mx-auto text-gray-500" />
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    Preview not available for this file type.
-                                </p>
+                                {previewBlurred && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-white/70 dark:bg-black/60">
+                                        <span className="text-xs font-medium uppercase tracking-wide text-gray-600 dark:text-gray-300">
+                                            Preview blurred
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <p className="text-xs text-gray-500">
