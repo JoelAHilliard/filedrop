@@ -1,4 +1,3 @@
-import { useLocation } from 'preact-iso';
 import { ModeToggle } from './mode-toggle';
 export function Header() {
 	return (

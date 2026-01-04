@@ -1,5 +1,3 @@
-// src/components/FileDropZone.tsx
-import { h } from 'preact';
 import { useCallback } from 'preact/hooks';
 import { useDropzone } from 'react-dropzone';
 import { Upload, File, X } from 'lucide-react';

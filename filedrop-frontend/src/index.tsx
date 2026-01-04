@@ -68,7 +68,7 @@ export function App() {
 							<AccordionItem value="item-2" className="border-none">
 								<AccordionTrigger className="text-sm hover:no-underline py-3">Is Filedrop for long-term storage?</AccordionTrigger>
 								<AccordionContent className="text-sm text-muted-foreground pb-3">
-									No. As soon as the file is downloaded, or 2 hours after initial upload, the file is deleted. Filedrop is not a long-term storage solution.
+									No. Files are deleted when the download limit is reached or when they expire (default 24 hours, max 3 days). Filedrop is not a long-term storage solution.
 								</AccordionContent>
 							</AccordionItem>
 							<AccordionItem value="item-3" className="border-none">
@@ -79,7 +79,7 @@ export function App() {
 							</AccordionItem>
 						</Accordion>
 						<div class="text-center text-xs text-muted-foreground mt-6 pt-4 border-t">
-							© 2024 Filedrop. Files auto-delete after 24 hours.
+							© 2025 Filedrop. Files auto-delete based on your settings.
 						</div>
 					</div>
 				</div>
