@@ -8,7 +8,7 @@ import QRCode from "react-qr-code";
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { encryptData, arrayBufferToBase64, str2ab, formatFileSize } from '@/utils/crypto';
+import { encryptData, arrayBufferToBase64, formatFileSize } from '@/utils/crypto';
 import FileDropZone from '@/components/FileDropZone';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -62,6 +62,10 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
         setDropzoneKey(prev => prev + 1); // Force dropzone reset
     };
 
+    const buildShareLink = (accessCode: string, secret: string) => {
+        return `${window.location.origin}/?ac=${encodeURIComponent(accessCode)}#sw=${encodeURIComponent(secret)}`;
+    };
+
     const handleUpload = async (event: any) => {
         event.preventDefault();
         setLoading(true);
@@ -91,18 +95,18 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                 setLoading(false);
                 return;
             }
-            let buffer = str2ab(inputText);
+            const buffer = new TextEncoder().encode(inputText).buffer;
             setFileSize(buffer.byteLength);
             
-            const { encryptedBuffer, iv, salt } = await encryptData(buffer, sw);
+            const { encryptedBuffer, iv, salt, hmac } = await encryptData(buffer, sw);
             const downloadsLimit = burnAfterRead ? 1 : maxDownloads;
             const ttlSeconds = Math.max(1, ttlHours) * 3600;
             const formData = new FormData();
             formData.append('file', new Blob([encryptedBuffer]), 'file.txt');
             formData.append('type', 'text/plain');
-            formData.append('secretWord', sw);
             formData.append('iv', arrayBufferToBase64(iv));
             formData.append('salt', arrayBufferToBase64(salt));
+            formData.append('hmac', arrayBufferToBase64(hmac));
             formData.append('maxDownloads', String(downloadsLimit));
             formData.append('ttlSeconds', String(ttlSeconds));
     
@@ -164,15 +168,15 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
     
             let fileData = await selectedFile.arrayBuffer();
             
-            const { encryptedBuffer, iv, salt } = await encryptData(fileData, sw);
+            const { encryptedBuffer, iv, salt, hmac } = await encryptData(fileData, sw);
             const downloadsLimit = burnAfterRead ? 1 : maxDownloads;
             const ttlSeconds = Math.max(1, ttlHours) * 3600;
             const formData = new FormData();
             formData.append('file', new Blob([encryptedBuffer]), selectedFile.name);
             formData.append('type', selectedFile.type);
-            formData.append('secretWord', sw);
             formData.append('iv', arrayBufferToBase64(iv));
             formData.append('salt', arrayBufferToBase64(salt));
+            formData.append('hmac', arrayBufferToBase64(hmac));
             formData.append('maxDownloads', String(downloadsLimit));
             formData.append('ttlSeconds', String(ttlSeconds));
     
@@ -369,7 +373,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 <>
                                     <Button 
                                         onClick={() => {
-                                            const link = `${window.location.origin}/?ac=${givenAccessCode}&sw=${secretWord}`;
+                                            const link = buildShareLink(givenAccessCode, secretWord);
                                             handleCopy(link, 'link');
                                         }}
                                         className="w-full"
@@ -458,7 +462,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                     variant="outline" 
                                     className="w-full"
                                     onClick={() => {
-                                        const link = `${window.location.origin}/?ac=${givenAccessCode}&sw=${secretWord}`;
+                                        const link = buildShareLink(givenAccessCode, secretWord);
                                         handleCopy(link, 'link');
                                     }}
                                 >
@@ -486,7 +490,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 <div className="bg-white p-3 rounded border">
                                     <QRCode 
                                         size={120} 
-                                        value={`${window.location.origin}/?ac=${givenAccessCode}&sw=${secretWord}`} 
+                                        value={buildShareLink(givenAccessCode, secretWord)} 
                                     />
                                 </div>
                                 <p className="text-sm text-gray-600 dark:text-gray-400">

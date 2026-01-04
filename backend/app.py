@@ -148,16 +148,15 @@ def upload_file():
         return jsonify({'error': 'No file uploaded.'}), 400
     
     file = request.files['file']
-    # Although the secret word is sent, the server no longer uses it.
-    secret_word = request.form.get('secretWord')
     file_type = request.form.get('type')
     iv = request.form.get('iv')  # Provided from client (Base64)
     salt = request.form.get('salt')  # Provided from client (Base64)
+    hmac = request.form.get('hmac')
     ttl_seconds = clamp_int(request.form.get('ttlSeconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
     max_downloads = clamp_int(request.form.get('maxDownloads'), DEFAULT_MAX_DOWNLOADS, 1, MAX_DOWNLOADS_LIMIT)
     
-    if not file or not secret_word or not iv or not salt:
-        return jsonify({'error': 'Missing file, secret word, iv or salt'}), 400
+    if not file or not iv or not salt:
+        return jsonify({'error': 'Missing file, iv or salt'}), 400
     
     file_data = file.read()
     if len(file_data) > app.config['MAX_CONTENT_LENGTH']:
@@ -183,6 +182,7 @@ def upload_file():
             'filetype': file_type or 'unknown',
             'iv': iv,
             'salt': salt,
+            'hmac': hmac or '',
             'extension': extension,
             'created_at': created_at.isoformat() + 'Z',
             'ttl_seconds': str(ttl_seconds),
@@ -240,10 +240,12 @@ def retrieve_file():
         response.headers['X-IV'] = iv
         response.headers['X-SALT'] = salt
         response.headers['X-EXTENSION'] = metadata.get('extension', 'bin')
+        if metadata.get('hmac'):
+            response.headers['X-HMAC'] = metadata.get('hmac')
         response.headers['X-EXPIRES-AT'] = expires_at.isoformat() + 'Z'
         response.headers['X-REMAINING-DOWNLOADS'] = str(max(remaining_downloads - 1, 0))
         response.headers['X-MAX-DOWNLOADS'] = str(max_downloads)
-        response.headers['Access-Control-Expose-Headers'] = 'X-IV, X-SALT, X-EXTENSION, X-EXPIRES-AT, X-REMAINING-DOWNLOADS, X-MAX-DOWNLOADS'
+        response.headers['Access-Control-Expose-Headers'] = 'X-IV, X-SALT, X-HMAC, X-EXTENSION, X-EXPIRES-AT, X-REMAINING-DOWNLOADS, X-MAX-DOWNLOADS'
 
         if remaining_downloads <= 1:
             s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)

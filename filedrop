@@ -71,7 +71,7 @@ derive_key_hex() {
 import binascii, hashlib, sys
 secret = sys.argv[1].encode()
 salt = binascii.unhexlify(sys.argv[2])
-key = hashlib.pbkdf2_hmac('sha256', secret, salt, 100000, dklen=32)
+key = hashlib.pbkdf2_hmac('sha256', secret, salt, 100000, dklen=64)
 print(binascii.hexlify(key).decode())
 PY
 }
@@ -98,23 +98,36 @@ upload_file() {
 
   local key_hex
   key_hex=$(derive_key_hex "$secret_word" "$salt_hex")
+  local enc_key_hex="${key_hex:0:64}"
+  local mac_key_hex="${key_hex:64}"
 
   local tmp_enc
   tmp_enc=$(mktemp)
-  openssl enc -aes-256-cbc -K "$key_hex" -iv "$iv_hex" -in "$file_path" -out "$tmp_enc"
+  openssl enc -aes-256-cbc -K "$enc_key_hex" -iv "$iv_hex" -in "$file_path" -out "$tmp_enc"
 
   local iv_b64
   local salt_b64
   iv_b64=$(hex_to_b64 "$iv_hex")
   salt_b64=$(hex_to_b64 "$salt_hex")
+  local hmac_b64
+  hmac_b64=$(python3 - <<'PY' "$mac_key_hex" "$iv_hex" "$tmp_enc"
+import base64, binascii, hashlib, hmac, sys
+key = binascii.unhexlify(sys.argv[1])
+iv = binascii.unhexlify(sys.argv[2])
+with open(sys.argv[3], 'rb') as f:
+    data = iv + f.read()
+digest = hmac.new(key, data, hashlib.sha256).digest()
+print(base64.b64encode(digest).decode())
+PY
+)
 
   local response
   response=$(curl -sS -w '\n%{http_code}' \
     -F "file=@${tmp_enc};filename=$(basename "$file_path")" \
     -F "type=${mime_type}" \
-    -F "secretWord=${secret_word}" \
     -F "iv=${iv_b64}" \
     -F "salt=${salt_b64}" \
+    -F "hmac=${hmac_b64}" \
     "${url}/upload")
 
   rm -f "$tmp_enc"
@@ -161,9 +174,11 @@ download_file() {
   local iv_b64
   local salt_b64
   local extension
+  local hmac_b64
   iv_b64=$(awk -F': ' 'tolower($1)=="x-iv"{print $2}' "$tmp_headers" | tr -d '\r')
   salt_b64=$(awk -F': ' 'tolower($1)=="x-salt"{print $2}' "$tmp_headers" | tr -d '\r')
   extension=$(awk -F': ' 'tolower($1)=="x-extension"{print $2}' "$tmp_headers" | tr -d '\r')
+  hmac_b64=$(awk -F': ' 'tolower($1)=="x-hmac"{print $2}' "$tmp_headers" | tr -d '\r')
   extension=${extension:-bin}
 
   if [[ -z "$iv_b64" || -z "$salt_b64" ]]; then
@@ -179,13 +194,32 @@ download_file() {
 
   local key_hex
   key_hex=$(derive_key_hex "$secret_word" "$salt_hex")
+  local enc_key_hex="${key_hex:0:64}"
+  local mac_key_hex="${key_hex:64}"
+
+  if [[ -n "$hmac_b64" ]]; then
+    python3 - <<'PY' "$mac_key_hex" "$iv_hex" "$tmp_enc" "$hmac_b64"
+import base64, binascii, hashlib, hmac, sys
+key = binascii.unhexlify(sys.argv[1])
+iv = binascii.unhexlify(sys.argv[2])
+with open(sys.argv[3], 'rb') as f:
+    data = iv + f.read()
+expected = hmac.new(key, data, hashlib.sha256).digest()
+actual = base64.b64decode(sys.argv[4])
+if not hmac.compare_digest(expected, actual):
+    print("Integrity check failed. The secret word may be incorrect or the file was tampered with.", file=sys.stderr)
+    sys.exit(1)
+PY
+  else
+    echo "Warning: Missing HMAC header; skipping integrity check." >&2
+  fi
 
   local final_path="$out_path"
   if [[ -z "$final_path" ]]; then
     final_path="filedrop-${access_code}.${extension}"
   fi
 
-  openssl enc -d -aes-256-cbc -K "$key_hex" -iv "$iv_hex" -in "$tmp_enc" -out "$final_path"
+  openssl enc -d -aes-256-cbc -K "$enc_key_hex" -iv "$iv_hex" -in "$tmp_enc" -out "$final_path"
 
   rm -f "$tmp_headers" "$tmp_enc"
   echo "Saved to ${final_path}"

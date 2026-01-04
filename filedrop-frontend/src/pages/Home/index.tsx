@@ -23,7 +23,8 @@ export default function Home() {
     const checkForURLCode = () => {
         const queryParams = new URLSearchParams(window.location.search);
         const code = queryParams.get('ac');
-        const sw = queryParams.get('sw');
+        const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+        const sw = hashParams.get('sw') || queryParams.get('sw');
         if (code && sw) {
             setInitialAccessCode(code); 
             setInitialSecretWord(sw);

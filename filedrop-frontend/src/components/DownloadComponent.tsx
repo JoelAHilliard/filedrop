@@ -74,6 +74,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             if (response.ok) {
                 const ivB64 = response.headers.get('X-IV');
                 const saltB64 = response.headers.get('X-SALT');
+                const hmacB64 = response.headers.get('X-HMAC');
                 const extension = response.headers.get('X-EXTENSION') || 'bin';
                 const remainingDownloadsHeader = response.headers.get('X-REMAINING-DOWNLOADS');
                 const maxDownloadsHeader = response.headers.get('X-MAX-DOWNLOADS');
@@ -86,8 +87,9 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 const encryptedBuffer = await response.arrayBuffer();
                 const iv = new Uint8Array(base64ToArrayBuffer(ivB64));
                 const salt = new Uint8Array(base64ToArrayBuffer(saltB64));
+                const hmac = hmacB64 ? new Uint8Array(base64ToArrayBuffer(hmacB64)) : undefined;
 
-                const decryptedBuffer = await decryptData(encryptedBuffer, secW, iv, salt);
+                const decryptedBuffer = await decryptData(encryptedBuffer, secW, iv, salt, hmac);
                 
                 const resolvedBaseName = normalizeFileBase(fileBaseName);
                 const resolvedFileName = extension === 'txt' ? `file.${extension}` : `${resolvedBaseName}.${extension}`;
