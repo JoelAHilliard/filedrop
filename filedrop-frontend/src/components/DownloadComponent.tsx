@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Download, File, FileText, CheckCircle, Copy, Shield } from 'lucide-react';
+import { Download, File, FileText, CheckCircle, Copy, Shield, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,6 +35,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const [displayText, setDisplayText] = useState("");
     const [downloadComplete, setDownloadComplete] = useState(false);
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
+    const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+    const [previewKind, setPreviewKind] = useState<'image' | 'pdf' | 'none'>('none');
 
     const { toast } = useToast();
 
@@ -53,6 +55,37 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         return withoutExt || 'file';
     };
 
+    const getPreviewKind = (extension: string) => {
+        const ext = extension.toLowerCase();
+        if (ext === 'pdf') return 'pdf';
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff'].includes(ext)) return 'image';
+        return 'none';
+    };
+
+    const getMimeTypeFromExtension = (extension: string) => {
+        const ext = extension.toLowerCase();
+        if (ext === 'pdf') return 'application/pdf';
+        if (ext === 'png') return 'image/png';
+        if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+        if (ext === 'gif') return 'image/gif';
+        if (ext === 'webp') return 'image/webp';
+        if (ext === 'svg') return 'image/svg+xml';
+        if (ext === 'bmp') return 'image/bmp';
+        if (ext === 'tif' || ext === 'tiff') return 'image/tiff';
+        return 'application/octet-stream';
+    };
+
+    const handleDownloadFile = () => {
+        if (!downloadUrl || !downloadedFileInfo) return;
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = downloadedFileInfo.fileName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const handleRetrieveFile = async (accessCode?: string, sw?: string) => {
         let code = accessCode ? accessCode : takenAccessCode;
         let secW = sw ? sw : takenSecretWord;
@@ -67,6 +100,15 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         
         setLoading(true);
         setDownloadComplete(false);
+        setDisplayText("");
+        setDownloadedFileInfo(null);
+        setPreviewKind('none');
+        setDownloadUrl((currentUrl) => {
+            if (currentUrl) {
+                window.URL.revokeObjectURL(currentUrl);
+            }
+            return null;
+        });
         try {
             const response = await fetch(`${URL}/retrieve?accessCode=${code}`, {
                 method: 'GET'
@@ -91,9 +133,17 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 
                 const resolvedBaseName = normalizeFileBase(fileBaseName);
                 const resolvedFileName = extension === 'txt' ? `file.${extension}` : `${resolvedBaseName}.${extension}`;
+                const previewType = getPreviewKind(extension);
+                const fileTypeLabel = extension === 'txt'
+                    ? 'Text Document'
+                    : previewType === 'pdf'
+                        ? 'PDF Document'
+                        : previewType === 'image'
+                            ? 'Image File'
+                            : 'Binary File';
                 const downloadInfo: DownloadedFileInfo = {
                     fileName: resolvedFileName,
-                    fileType: extension === 'txt' ? 'Text Document' : 'Binary File',
+                    fileType: fileTypeLabel,
                     size: decryptedBuffer.byteLength,
                     extension: extension,
                     downloadTime: new Date().toLocaleString(),
@@ -108,18 +158,11 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     const textContent = decoder.decode(decryptedBuffer);
                     setDisplayText(textContent);
                 } else {
-                    const blob = new Blob([decryptedBuffer], { type: 'application/octet-stream' });
+                    const mimeType = getMimeTypeFromExtension(extension);
+                    const blob = new Blob([decryptedBuffer], { type: mimeType });
                     const url = window.URL.createObjectURL(blob);
-                    
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = resolvedFileName;
-                    a.target = '_blank';
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
+                    setPreviewKind(previewType);
+                    setDownloadUrl(url);
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
@@ -156,6 +199,14 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             handleRetrieveFile(initialAccessCode, initialSecretWord);
         }
     }, [initialAccessCode, initialSecretWord]);
+
+    useEffect(() => {
+        return () => {
+            if (downloadUrl) {
+                window.URL.revokeObjectURL(downloadUrl);
+            }
+        };
+    }, [downloadUrl]);
 
     return (
         <div className="space-y-6">
@@ -255,6 +306,58 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                             className="min-h-[300px] font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900"
                             readOnly
                         />
+                    </CardContent>
+                </Card>
+            )}
+
+            {downloadComplete && downloadedFileInfo && !downloadedFileInfo.isText && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="flex items-center gap-2">
+                                {previewKind === 'image' ? <ImageIcon className="w-5 h-5" /> : <File className="w-5 h-5" />}
+                                Preview
+                            </CardTitle>
+                            <Button
+                                size="sm"
+                                onClick={handleDownloadFile}
+                                disabled={!downloadUrl}
+                            >
+                                <Download className="w-4 h-4 mr-2" />
+                                Download
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {previewKind === 'image' && downloadUrl && (
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
+                                <img
+                                    src={downloadUrl}
+                                    alt={downloadedFileInfo.fileName}
+                                    className="max-h-[480px] w-full object-contain rounded-md"
+                                />
+                            </div>
+                        )}
+                        {previewKind === 'pdf' && downloadUrl && (
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                                <iframe
+                                    src={downloadUrl}
+                                    title={downloadedFileInfo.fileName}
+                                    className="w-full h-[520px] bg-white"
+                                />
+                            </div>
+                        )}
+                        {previewKind === 'none' && (
+                            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-8 text-center space-y-2">
+                                <File className="w-6 h-6 mx-auto text-gray-500" />
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    Preview not available for this file type.
+                                </p>
+                            </div>
+                        )}
+                        <p className="text-xs text-gray-500">
+                            {downloadedFileInfo.fileName} · {formatFileSize(downloadedFileInfo.size)}
+                        </p>
                     </CardContent>
                 </Card>
             )}
