@@ -20,6 +20,27 @@ interface DownloadedFileInfo {
     expiresAt?: string;
 }
 
+interface PreviewData {
+    url: string;
+    type: 'image' | 'pdf';
+}
+
+/** List of file extensions that support preview */
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+const PDF_EXTENSIONS = ['pdf'];
+
+/**
+ * Check if file extension supports preview
+ * @param extension - File extension (without dot)
+ * @returns Preview type ('image' | 'pdf') or null if not previewable
+ */
+function getPreviewType(extension: string): 'image' | 'pdf' | null {
+    const ext = extension.toLowerCase();
+    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
+    if (PDF_EXTENSIONS.includes(ext)) return 'pdf';
+    return null;
+}
+
 interface DownloadComponentProps {
     initialAccessCode?: string;
     initialSecretWord?: string;
