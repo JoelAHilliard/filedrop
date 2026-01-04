@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Download, File, FileText, CheckCircle, Copy, Shield } from 'lucide-react';
+import { Download, File, FileText, CheckCircle, Copy, Shield, Eye, EyeOff, Image } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,6 +20,27 @@ interface DownloadedFileInfo {
     expiresAt?: string;
 }
 
+interface PreviewData {
+    url: string;
+    type: 'image' | 'pdf';
+}
+
+/** List of file extensions that support preview */
+const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+const PDF_EXTENSIONS = ['pdf'];
+
+/**
+ * Check if file extension supports preview
+ * @param extension - File extension (without dot)
+ * @returns Preview type ('image' | 'pdf') or null if not previewable
+ */
+function getPreviewType(extension: string): 'image' | 'pdf' | null {
+    const ext = extension.toLowerCase();
+    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
+    if (PDF_EXTENSIONS.includes(ext)) return 'pdf';
+    return null;
+}
+
 interface DownloadComponentProps {
     initialAccessCode?: string;
     initialSecretWord?: string;
@@ -35,6 +56,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const [displayText, setDisplayText] = useState("");
     const [downloadComplete, setDownloadComplete] = useState(false);
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
+    const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+    const [isPreviewBlurred, setIsPreviewBlurred] = useState(true);
 
     const { toast } = useToast();
 
@@ -67,6 +90,12 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         
         setLoading(true);
         setDownloadComplete(false);
+        // Cleanup previous preview URL before fetching new file
+        if (previewData?.url) {
+            window.URL.revokeObjectURL(previewData.url);
+        }
+        setPreviewData(null);
+        setIsPreviewBlurred(true);
         try {
             const response = await fetch(`${URL}/retrieve?accessCode=${code}`, {
                 method: 'GET'
@@ -108,6 +137,20 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     const textContent = decoder.decode(decryptedBuffer);
                     setDisplayText(textContent);
                 } else {
+                    // Check if file is previewable (image or PDF)
+                    const previewType = getPreviewType(extension);
+                    
+                    if (previewType) {
+                        // Create appropriate MIME type for preview
+                        const mimeType = previewType === 'pdf' 
+                            ? 'application/pdf' 
+                            : `image/${extension === 'svg' ? 'svg+xml' : extension}`;
+                        const blob = new Blob([decryptedBuffer], { type: mimeType });
+                        const previewUrl = window.URL.createObjectURL(blob);
+                        setPreviewData({ url: previewUrl, type: previewType });
+                    }
+                    
+                    // Always trigger download for non-text files
                     const blob = new Blob([decryptedBuffer], { type: 'application/octet-stream' });
                     const url = window.URL.createObjectURL(blob);
                     
@@ -156,6 +199,15 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             handleRetrieveFile(initialAccessCode, initialSecretWord);
         }
     }, [initialAccessCode, initialSecretWord]);
+
+    // Cleanup preview URL on unmount to prevent memory leaks
+    useEffect(() => {
+        return () => {
+            if (previewData?.url) {
+                window.URL.revokeObjectURL(previewData.url);
+            }
+        };
+    }, [previewData]);
 
     return (
         <div className="space-y-6">
@@ -255,6 +307,79 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                             className="min-h-[300px] font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900"
                             readOnly
                         />
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Preview for images and PDFs */}
+            {previewData && downloadComplete && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="flex items-center gap-2">
+                                <Image className="w-5 h-5" />
+                                File Preview
+                            </CardTitle>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setIsPreviewBlurred(!isPreviewBlurred)}
+                            >
+                                {isPreviewBlurred ? (
+                                    <>
+                                        <Eye className="w-4 h-4 mr-2" />
+                                        Show Preview
+                                    </>
+                                ) : (
+                                    <>
+                                        <EyeOff className="w-4 h-4 mr-2" />
+                                        Blur Preview
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div 
+                            className="relative overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+                            style={{ minHeight: '300px' }}
+                        >
+                            {previewData.type === 'image' ? (
+                                <img
+                                    src={previewData.url}
+                                    alt="File preview"
+                                    className={`max-w-full max-h-[500px] object-contain transition-all duration-300 ${
+                                        isPreviewBlurred ? 'blur-xl' : 'blur-0'
+                                    }`}
+                                    style={{ cursor: isPreviewBlurred ? 'pointer' : 'default' }}
+                                    onClick={() => isPreviewBlurred && setIsPreviewBlurred(false)}
+                                />
+                            ) : (
+                                <iframe
+                                    src={previewData.url}
+                                    title="PDF preview"
+                                    className={`w-full h-[500px] border-0 transition-all duration-300 ${
+                                        isPreviewBlurred ? 'blur-xl' : 'blur-0'
+                                    }`}
+                                    style={{ cursor: isPreviewBlurred ? 'pointer' : 'default' }}
+                                    onClick={() => isPreviewBlurred && setIsPreviewBlurred(false)}
+                                />
+                            )}
+                            {isPreviewBlurred && (
+                                <div 
+                                    className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                                    onClick={() => setIsPreviewBlurred(false)}
+                                >
+                                    <div className="bg-black/50 text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                                        <Eye className="w-5 h-5" />
+                                        Click to reveal
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2 text-center">
+                            {previewData.type === 'image' ? 'Image' : 'PDF'} preview is blurred for privacy. Click to reveal.
+                        </p>
                     </CardContent>
                 </Card>
             )}
