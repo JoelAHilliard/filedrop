@@ -79,7 +79,7 @@ export function App() {
 							</AccordionItem>
 						</Accordion>
 						<div class="text-center text-xs text-muted-foreground mt-6 pt-4 border-t">
-							© 2025 Filedrop. Files auto-delete based on your settings.
+							© {new Date().getFullYear()} Filedrop. Files auto-delete based on your settings.
 						</div>
 					</div>
 				</div>
