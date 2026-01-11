@@ -290,18 +290,18 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                         </div>
                     )}
 
-                    <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-4 space-y-4">
-                        <div className="flex items-center justify-between">
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 sm:p-4 space-y-3 sm:space-y-4">
+                        <div className="flex items-start sm:items-center justify-between gap-2">
                             <div>
                                 <h3 className="text-sm font-medium">Access Controls</h3>
-                                <p className="text-xs text-gray-500">Set expiry and download limits before upload.</p>
+                                <p className="text-xs text-gray-500 hidden sm:block">Set expiry and download limits before upload.</p>
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-gray-500">
-                                <Timer className="w-4 h-4" />
+                            <div className="flex items-center gap-1.5 sm:gap-2 text-xs text-gray-500 shrink-0">
+                                <Timer className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 <span>{ttlHours >= 24 ? `${ttlHours / 24}d` : `${ttlHours}h`} TTL</span>
                             </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="ttl-hours" className="text-sm">Expiry (hours, max 3 days)</Label>
                                 <Input
@@ -515,7 +515,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
                         <div className="text-center space-y-2">
                             <Shield className="w-6 h-6 mx-auto text-gray-600" />
                             <h3 className="font-medium text-sm">AES-256 Encryption</h3>
