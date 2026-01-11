@@ -184,6 +184,16 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     const url = window.URL.createObjectURL(blob);
                     setPreviewKind(previewType);
                     setDownloadUrl(url);
+
+                    // Auto-download non-previewable files (not images or PDFs)
+                    if (previewType === 'none') {
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = resolvedFileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
