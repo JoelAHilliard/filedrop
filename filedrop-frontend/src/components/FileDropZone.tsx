@@ -54,7 +54,7 @@ const FileDropZone = ({ onChange, resetKey, selectedFile, onRemoveFile, formatFi
     <div
       {...dragProps}
       onClick={handleClick}
-      className={`relative border-2 border-dashed rounded-lg p-8 text-center min-h-[200px] flex flex-col justify-center transition-all ${
+      className={`relative border-2 border-dashed rounded-lg p-4 sm:p-8 text-center min-h-[140px] sm:min-h-[200px] flex flex-col justify-center transition-all ${
         isDragActive
           ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
           : selectedFile
@@ -64,8 +64,8 @@ const FileDropZone = ({ onChange, resetKey, selectedFile, onRemoveFile, formatFi
     >
       <input {...inputProps} key={resetKey} />
       {selectedFile ? (
-        <div className="space-y-4">
-          <File className="w-12 h-12 mx-auto text-gray-500 dark:text-gray-400" />
+        <div className="space-y-3 sm:space-y-4">
+          <File className="w-8 h-8 sm:w-12 sm:h-12 mx-auto text-gray-500 dark:text-gray-400" />
           <div className="space-y-2">
             <p className="font-medium break-all text-gray-900 dark:text-gray-100">
               {selectedFile.name}
@@ -101,7 +101,7 @@ const FileDropZone = ({ onChange, resetKey, selectedFile, onRemoveFile, formatFi
         </div>
       ) : (
         <div>
-          <Upload className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+          <Upload className="mx-auto h-8 w-8 sm:h-12 sm:w-12 text-gray-400 dark:text-gray-500" />
           {isDragActive ? (
             <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 font-medium">Drop the file here ...</p>
           ) : (
