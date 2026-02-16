@@ -38,6 +38,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     
     const decryptedBufferRef = useRef<ArrayBuffer | null>(null);
     const pendingFileNameRef = useRef<string>('');
+    const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
     const { toast } = useToast();
 
@@ -59,12 +60,27 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const triggerDownload = (buffer: ArrayBuffer, fileName: string) => {
         const blob = new Blob([buffer]);
         const url = window.URL.createObjectURL(blob);
+        
+        // Try anchor method first
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName;
         link.style.display = 'none';
         document.body.appendChild(link);
+        
+        // Try clicking
         link.click();
+        
+        // If that didn't work, try with dispatchEvent
+        if (!link.click) {
+            const event = new MouseEvent('click', {
+                view: window,
+                bubbles: true,
+                cancelable: true
+            });
+            link.dispatchEvent(event);
+        }
+        
         setTimeout(() => {
             document.body.removeChild(link);
             window.URL.revokeObjectURL(url);
@@ -132,8 +148,10 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 decryptedBufferRef.current = decryptedBuffer;
                 pendingFileNameRef.current = resolvedFileName;
                 
-                // Auto-download immediately
-                triggerDownload(decryptedBuffer, resolvedFileName);
+                // Auto-download with slight delay
+                setTimeout(() => {
+                    triggerDownload(decryptedBuffer, resolvedFileName);
+                }, 50);
                 
                 // Show text content inline only for .txt files
                 if (isText) {
@@ -174,10 +192,9 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     // Auto-fetch when URL has access code and secret word
     useEffect(() => {
         if (initialAccessCode && initialSecretWord) {
-            // Use setTimeout to delay slightly - helps with browser download blocking
             const timer = setTimeout(() => {
                 handleRetrieveFile(initialAccessCode, initialSecretWord);
-            }, 100);
+            }, 50);
             return () => clearTimeout(timer);
         }
     }, [initialAccessCode, initialSecretWord]);
