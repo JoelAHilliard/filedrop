@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Download, File, FileText, CheckCircle, Copy, Shield, Image as ImageIcon } from 'lucide-react';
+import { Download, FileText, CheckCircle, Copy, Shield } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,27 +20,6 @@ interface DownloadedFileInfo {
     expiresAt?: string;
 }
 
-interface PreviewData {
-    url: string;
-    type: 'image' | 'pdf';
-}
-
-/** List of file extensions that support preview */
-const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
-const PDF_EXTENSIONS = ['pdf'];
-
-/**
- * Check if file extension supports preview
- * @param extension - File extension (without dot)
- * @returns Preview type ('image' | 'pdf') or null if not previewable
- */
-function getPreviewType(extension: string): 'image' | 'pdf' | null {
-    const ext = extension.toLowerCase();
-    if (IMAGE_EXTENSIONS.includes(ext)) return 'image';
-    if (PDF_EXTENSIONS.includes(ext)) return 'pdf';
-    return null;
-}
-
 interface DownloadComponentProps {
     initialAccessCode?: string;
     initialSecretWord?: string;
@@ -56,8 +35,6 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const [displayText, setDisplayText] = useState("");
     const [downloadComplete, setDownloadComplete] = useState(false);
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
-    const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
-    const [previewKind, setPreviewKind] = useState<'image' | 'pdf' | 'none'>('none');
 
     const { toast } = useToast();
 
@@ -76,37 +53,6 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         return withoutExt || 'file';
     };
 
-    const getPreviewKind = (extension: string) => {
-        const ext = extension.toLowerCase();
-        if (ext === 'pdf') return 'pdf';
-        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff'].includes(ext)) return 'image';
-        return 'none';
-    };
-
-    const getMimeTypeFromExtension = (extension: string) => {
-        const ext = extension.toLowerCase();
-        if (ext === 'pdf') return 'application/pdf';
-        if (ext === 'png') return 'image/png';
-        if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
-        if (ext === 'gif') return 'image/gif';
-        if (ext === 'webp') return 'image/webp';
-        if (ext === 'svg') return 'image/svg+xml';
-        if (ext === 'bmp') return 'image/bmp';
-        if (ext === 'tif' || ext === 'tiff') return 'image/tiff';
-        return 'application/octet-stream';
-    };
-
-    const handleDownloadFile = () => {
-        if (!downloadUrl || !downloadedFileInfo) return;
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = downloadedFileInfo.fileName;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
     const handleRetrieveFile = async (accessCode?: string, sw?: string) => {
         let code = accessCode ? accessCode : takenAccessCode;
         let secW = sw ? sw : takenSecretWord;
@@ -123,13 +69,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         setDownloadComplete(false);
         setDisplayText("");
         setDownloadedFileInfo(null);
-        setPreviewKind('none');
-        setDownloadUrl((currentUrl) => {
-            if (currentUrl) {
-                window.URL.revokeObjectURL(currentUrl);
-            }
-            return null;
-        });
+
         try {
             const response = await fetch(`${URL}/retrieve?accessCode=${code}`, {
                 method: 'GET'
@@ -154,44 +94,36 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 
                 const resolvedBaseName = normalizeFileBase(fileBaseName);
                 const resolvedFileName = extension === 'txt' ? `file.${extension}` : `${resolvedBaseName}.${extension}`;
-                const previewType = getPreviewKind(extension);
-                const fileTypeLabel = extension === 'txt'
-                    ? 'Text Document'
-                    : previewType === 'pdf'
-                        ? 'PDF Document'
-                        : previewType === 'image'
-                            ? 'Image File'
-                            : 'Binary File';
+                const isText = extension === 'txt';
+                
                 const downloadInfo: DownloadedFileInfo = {
                     fileName: resolvedFileName,
-                    fileType: fileTypeLabel,
+                    fileType: isText ? 'Text Document' : 'File',
                     size: decryptedBuffer.byteLength,
                     extension: extension,
                     downloadTime: new Date().toLocaleString(),
-                    isText: extension === 'txt',
+                    isText: isText,
                     remainingDownloads: remainingDownloadsHeader ? Number(remainingDownloadsHeader) : undefined,
                     maxDownloads: maxDownloadsHeader ? Number(maxDownloadsHeader) : undefined,
                     expiresAt: expiresAtHeader || undefined
                 };
                 
-                if (extension === 'txt') {
+                // Auto-download all files (including text)
+                const blob = new Blob([decryptedBuffer]);
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = resolvedFileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+
+                // Show text content inline only for .txt files
+                if (isText) {
                     const decoder = new TextDecoder();
                     const textContent = decoder.decode(decryptedBuffer);
                     setDisplayText(textContent);
-                } else {
-                    const mimeType = getMimeTypeFromExtension(extension);
-                    const blob = new Blob([decryptedBuffer], { type: mimeType });
-                    const url = window.URL.createObjectURL(blob);
-                    setPreviewKind(previewType);
-                    setDownloadUrl(url);
-
-                    // Auto-download all file types to disk
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = resolvedFileName;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
@@ -199,7 +131,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 
                 toast({
                     title: "Success",
-                    description: "File retrieved successfully.",
+                    description: isText ? "File downloaded and ready." : "File downloaded automatically.",
                 });
 
                 onFileRetrieved?.(code, secW);
@@ -228,14 +160,6 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             handleRetrieveFile(initialAccessCode, initialSecretWord);
         }
     }, [initialAccessCode, initialSecretWord]);
-
-    useEffect(() => {
-        return () => {
-            if (downloadUrl) {
-                window.URL.revokeObjectURL(downloadUrl);
-            }
-        };
-    }, [downloadUrl]);
 
     return (
         <div className="space-y-6">
@@ -307,14 +231,14 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 </CardContent>
             </Card>
 
-            {/* Retrieved text content - moved above download stats */}
+            {/* Text content - only for .txt files */}
             {displayText !== "" && downloadComplete && (
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <CardTitle className="flex items-center gap-2">
                                 <FileText className="w-5 h-5" />
-                                Retrieved Text
+                                Text Content
                             </CardTitle>
                             <Button
                                 size="sm"
@@ -339,80 +263,22 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 </Card>
             )}
 
-            {downloadComplete && downloadedFileInfo && !downloadedFileInfo.isText && (
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="flex items-center gap-2">
-                                {previewKind === 'image' ? <ImageIcon className="w-5 h-5" /> : <File className="w-5 h-5" />}
-                                Preview
-                            </CardTitle>
-                            <Button
-                                size="sm"
-                                onClick={handleDownloadFile}
-                                disabled={!downloadUrl}
-                            >
-                                <Download className="w-4 h-4 mr-2" />
-                                Download
-                            </Button>
-                        </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        {previewKind === 'image' && downloadUrl && (
-                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
-                                <img
-                                    src={downloadUrl}
-                                    alt={downloadedFileInfo.fileName}
-                                    className="max-h-[480px] w-full object-contain rounded-md"
-                                />
-                            </div>
-                        )}
-                        {previewKind === 'pdf' && downloadUrl && (
-                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
-                                <iframe
-                                    src={downloadUrl}
-                                    title={downloadedFileInfo.fileName}
-                                    className="w-full h-[520px] bg-white"
-                                />
-                            </div>
-                        )}
-                        {previewKind === 'none' && (
-                            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-8 text-center space-y-2">
-                                <File className="w-6 h-6 mx-auto text-gray-500" />
-                                <p className="text-sm text-gray-600 dark:text-gray-400">
-                                    Preview not available for this file type.
-                                </p>
-                            </div>
-                        )}
-                        <p className="text-xs text-gray-500">
-                            {downloadedFileInfo.fileName} · {formatFileSize(downloadedFileInfo.size)}
-                        </p>
-                    </CardContent>
-                </Card>
-            )}
-
+            {/* Download stats */}
             {downloadComplete && downloadedFileInfo && (
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <CheckCircle className="w-5 h-5 text-green-600" />
-                            Download Successful
+                            Download Complete
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-3 gap-4">
                             <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
-                                <File className="w-4 h-4 mx-auto text-gray-600" />
+                                <FileText className="w-4 h-4 mx-auto text-gray-600" />
                                 <p className="text-xs font-medium">File</p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
                                     {downloadedFileInfo.fileName}
-                                </p>
-                            </div>
-                            <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
-                                <FileText className="w-4 h-4 mx-auto text-gray-600" />
-                                <p className="text-xs font-medium">Type</p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    {downloadedFileInfo.fileType}
                                 </p>
                             </div>
                             <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
@@ -426,7 +292,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 <CheckCircle className="w-4 h-4 mx-auto text-green-600" />
                                 <p className="text-xs font-medium">Status</p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    Complete
+                                    Downloaded
                                 </p>
                             </div>
                         </div>
