@@ -40,13 +40,13 @@ export function App() {
 				<div class="flex flex-col min-h-screen bg-muted safe-top safe-bottom">
 					
 					<div class="bg-muted w-full flex flex-col justify-between gap-2">
-						<div class="py-2 max-w-2xl mx-auto w-full flex flex-col justify-between gap-2 px-4 safe-left safe-right">
+						<div class="py-2 max-w-4xl mx-auto w-full flex flex-col justify-between gap-2 px-4 safe-left safe-right">
 							<Header />
 						</div>
 					</div>
 
 					<div class="flex-grow bg-background w-full">
-						<main class="max-w-2xl mx-auto w-full flex flex-col py-1 justify-between gap-2 px-4 safe-left safe-right">
+						<main class="max-w-4xl mx-auto w-full flex flex-col py-1 justify-between gap-2 px-4 safe-left safe-right">
 							<Router>
 								<Route path="/" component={Home} />
 								<Route default component={NotFound} />
@@ -57,7 +57,7 @@ export function App() {
 				<Toaster />
 
 				<div class="w-full bg-muted border-t">
-					<div id='footer' class="max-w-2xl mx-auto w-full px-4 pb-6 safe-left safe-right">
+					<div id='footer' class="max-w-4xl mx-auto w-full px-4 pb-6 safe-left safe-right">
 						<Accordion type="single" collapsible className="w-full">
 							<AccordionItem value="item-1" className="border-none">
 								<AccordionTrigger className="text-sm hover:no-underline py-3">What is Filedrop?</AccordionTrigger>
