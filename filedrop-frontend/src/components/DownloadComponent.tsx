@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, CheckCircle, Copy, Shield } from 'lucide-react';
+import { Download, File, FileText, CheckCircle, Copy, Shield, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -35,10 +35,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const [displayText, setDisplayText] = useState("");
     const [downloadComplete, setDownloadComplete] = useState(false);
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
-    
-    const decryptedBufferRef = useRef<ArrayBuffer | null>(null);
-    const pendingFileNameRef = useRef<string>('');
-    const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+    const [previewKind, setPreviewKind] = useState<'image' | 'pdf' | 'none'>('none');
 
     const { toast } = useToast();
 
@@ -57,34 +55,35 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         return withoutExt || 'file';
     };
 
-    const triggerDownload = (buffer: ArrayBuffer, fileName: string) => {
-        const blob = new Blob([buffer]);
-        const url = window.URL.createObjectURL(blob);
-        
-        // Try anchor method first
+    const getPreviewKind = (extension: string) => {
+        const ext = extension.toLowerCase();
+        if (ext === 'pdf') return 'pdf';
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'tif', 'tiff'].includes(ext)) return 'image';
+        return 'none';
+    };
+
+    const getMimeTypeFromExtension = (extension: string) => {
+        const ext = extension.toLowerCase();
+        if (ext === 'pdf') return 'application/pdf';
+        if (ext === 'png') return 'image/png';
+        if (ext === 'jpg' || ext === 'jpeg') return 'image/jpeg';
+        if (ext === 'gif') return 'image/gif';
+        if (ext === 'webp') return 'image/webp';
+        if (ext === 'svg') return 'image/svg+xml';
+        if (ext === 'bmp') return 'image/bmp';
+        if (ext === 'tif' || ext === 'tiff') return 'image/tiff';
+        return 'application/octet-stream';
+    };
+
+    const handleDownloadFile = () => {
+        if (!downloadUrl || !downloadedFileInfo) return;
         const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.style.display = 'none';
+        link.href = downloadUrl;
+        link.download = downloadedFileInfo.fileName;
+        link.target = '_blank';
         document.body.appendChild(link);
-        
-        // Try clicking
         link.click();
-        
-        // If that didn't work, try with dispatchEvent
-        if (!link.click) {
-            const event = new MouseEvent('click', {
-                view: window,
-                bubbles: true,
-                cancelable: true
-            });
-            link.dispatchEvent(event);
-        }
-        
-        setTimeout(() => {
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-        }, 100);
+        document.body.removeChild(link);
     };
 
     const handleRetrieveFile = async (accessCode?: string, sw?: string) => {
@@ -103,9 +102,13 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         setDownloadComplete(false);
         setDisplayText("");
         setDownloadedFileInfo(null);
-        decryptedBufferRef.current = null;
-        pendingFileNameRef.current = '';
-
+        setPreviewKind('none');
+        setDownloadUrl((currentUrl) => {
+            if (currentUrl) {
+                window.URL.revokeObjectURL(currentUrl);
+            }
+            return null;
+        });
         try {
             const response = await fetch(`${URL}/retrieve?accessCode=${code}`, {
                 method: 'GET'
@@ -130,34 +133,46 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 
                 const resolvedBaseName = normalizeFileBase(fileBaseName);
                 const resolvedFileName = extension === 'txt' ? `file.${extension}` : `${resolvedBaseName}.${extension}`;
-                const isText = extension === 'txt';
-                
+                const previewType = getPreviewKind(extension);
+                const fileTypeLabel = extension === 'txt'
+                    ? 'Text Document'
+                    : previewType === 'pdf'
+                        ? 'PDF Document'
+                        : previewType === 'image'
+                            ? 'Image File'
+                            : 'Binary File';
                 const downloadInfo: DownloadedFileInfo = {
                     fileName: resolvedFileName,
-                    fileType: isText ? 'Text Document' : 'File',
+                    fileType: fileTypeLabel,
                     size: decryptedBuffer.byteLength,
                     extension: extension,
                     downloadTime: new Date().toLocaleString(),
-                    isText: isText,
+                    isText: extension === 'txt',
                     remainingDownloads: remainingDownloadsHeader ? Number(remainingDownloadsHeader) : undefined,
                     maxDownloads: maxDownloadsHeader ? Number(maxDownloadsHeader) : undefined,
                     expiresAt: expiresAtHeader || undefined
                 };
                 
-                // Store for manual download if needed
-                decryptedBufferRef.current = decryptedBuffer;
-                pendingFileNameRef.current = resolvedFileName;
-                
-                // Auto-download with slight delay
-                setTimeout(() => {
-                    triggerDownload(decryptedBuffer, resolvedFileName);
-                }, 50);
-                
-                // Show text content inline only for .txt files
-                if (isText) {
+                if (extension === 'txt') {
                     const decoder = new TextDecoder();
                     const textContent = decoder.decode(decryptedBuffer);
                     setDisplayText(textContent);
+                } else {
+                    const mimeType = getMimeTypeFromExtension(extension);
+                    const blob = new Blob([decryptedBuffer], { type: mimeType });
+                    const url = window.URL.createObjectURL(blob);
+                    setPreviewKind(previewType);
+                    setDownloadUrl(url);
+
+                    // Auto-download non-previewable files (not images or PDFs)
+                    if (previewType === 'none') {
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = resolvedFileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
@@ -165,7 +180,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 
                 toast({
                     title: "Success",
-                    description: isText ? "File ready." : "File downloaded.",
+                    description: "File retrieved successfully.",
                 });
 
                 onFileRetrieved?.(code, secW);
@@ -189,23 +204,19 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         }
     };
 
-    // Auto-fetch when URL has access code and secret word
     useEffect(() => {
         if (initialAccessCode && initialSecretWord) {
-            const timer = setTimeout(() => {
-                handleRetrieveFile(initialAccessCode, initialSecretWord);
-            }, 50);
-            return () => clearTimeout(timer);
+            handleRetrieveFile(initialAccessCode, initialSecretWord);
         }
     }, [initialAccessCode, initialSecretWord]);
 
-    const handleManualDownload = () => {
-        if (decryptedBufferRef.current && pendingFileNameRef.current) {
-            triggerDownload(decryptedBufferRef.current, pendingFileNameRef.current);
-        } else {
-            handleRetrieveFile();
-        }
-    };
+    useEffect(() => {
+        return () => {
+            if (downloadUrl) {
+                window.URL.revokeObjectURL(downloadUrl);
+            }
+        };
+    }, [downloadUrl]);
 
     return (
         <div className="space-y-6">
@@ -266,7 +277,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
 
                     {!loading && (
                         <Button 
-                            onClick={handleRetrieveFile} 
+                            onClick={() => handleRetrieveFile()} 
                             className="w-full"
                             disabled={!takenAccessCode || !takenSecretWord}
                         >
@@ -277,27 +288,14 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 </CardContent>
             </Card>
 
-            {/* Manual download button if auto-download was blocked */}
-            {!loading && downloadComplete && decryptedBufferRef.current && (
-                <Button 
-                    onClick={handleManualDownload} 
-                    className="w-full"
-                    size="lg"
-                    variant="outline"
-                >
-                    <Download className="w-5 h-5 mr-2" />
-                    Download Again
-                </Button>
-            )}
-
-            {/* Text content - only for .txt files */}
+            {/* Retrieved text content - moved above download stats */}
             {displayText !== "" && downloadComplete && (
                 <Card>
                     <CardHeader>
                         <div className="flex items-center justify-between">
                             <CardTitle className="flex items-center gap-2">
                                 <FileText className="w-5 h-5" />
-                                Text Content
+                                Retrieved Text
                             </CardTitle>
                             <Button
                                 size="sm"
@@ -322,22 +320,80 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 </Card>
             )}
 
-            {/* Download stats */}
+            {downloadComplete && downloadedFileInfo && !downloadedFileInfo.isText && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="flex items-center gap-2">
+                                {previewKind === 'image' ? <ImageIcon className="w-5 h-5" /> : <File className="w-5 h-5" />}
+                                Preview
+                            </CardTitle>
+                            <Button
+                                size="sm"
+                                onClick={handleDownloadFile}
+                                disabled={!downloadUrl}
+                            >
+                                <Download className="w-4 h-4 mr-2" />
+                                Download
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {previewKind === 'image' && downloadUrl && (
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
+                                <img
+                                    src={downloadUrl}
+                                    alt={downloadedFileInfo.fileName}
+                                    className="max-h-[480px] w-full object-contain rounded-md"
+                                />
+                            </div>
+                        )}
+                        {previewKind === 'pdf' && downloadUrl && (
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 overflow-hidden">
+                                <iframe
+                                    src={downloadUrl}
+                                    title={downloadedFileInfo.fileName}
+                                    className="w-full h-[520px] bg-white"
+                                />
+                            </div>
+                        )}
+                        {previewKind === 'none' && (
+                            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-8 text-center space-y-2">
+                                <File className="w-6 h-6 mx-auto text-gray-500" />
+                                <p className="text-sm text-gray-600 dark:text-gray-400">
+                                    Preview not available for this file type.
+                                </p>
+                            </div>
+                        )}
+                        <p className="text-xs text-gray-500">
+                            {downloadedFileInfo.fileName} · {formatFileSize(downloadedFileInfo.size)}
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
+
             {downloadComplete && downloadedFileInfo && (
                 <Card>
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <CheckCircle className="w-5 h-5 text-green-600" />
-                            Download Complete
+                            Download Successful
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-4">
                             <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
-                                <FileText className="w-4 h-4 mx-auto text-gray-600" />
+                                <File className="w-4 h-4 mx-auto text-gray-600" />
                                 <p className="text-xs font-medium">File</p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
                                     {downloadedFileInfo.fileName}
+                                </p>
+                            </div>
+                            <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
+                                <FileText className="w-4 h-4 mx-auto text-gray-600" />
+                                <p className="text-xs font-medium">Type</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    {downloadedFileInfo.fileType}
                                 </p>
                             </div>
                             <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
@@ -351,7 +407,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 <CheckCircle className="w-4 h-4 mx-auto text-green-600" />
                                 <p className="text-xs font-medium">Status</p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    Done
+                                    Complete
                                 </p>
                             </div>
                         </div>
