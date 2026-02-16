@@ -185,15 +185,13 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     setPreviewKind(previewType);
                     setDownloadUrl(url);
 
-                    // Auto-download non-previewable files (not images or PDFs)
-                    if (previewType === 'none') {
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = resolvedFileName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }
+                    // Auto-download all file types to disk
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = resolvedFileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
