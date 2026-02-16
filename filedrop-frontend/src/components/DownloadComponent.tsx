@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'preact/hooks';
+import { useState, useEffect, useRef } from 'preact/hooks';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Download, FileText, CheckCircle, Copy, Shield } from 'lucide-react';
@@ -35,6 +35,9 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
     const [displayText, setDisplayText] = useState("");
     const [downloadComplete, setDownloadComplete] = useState(false);
     const [downloadedFileInfo, setDownloadedFileInfo] = useState<DownloadedFileInfo | null>(null);
+    
+    const decryptedBufferRef = useRef<ArrayBuffer | null>(null);
+    const pendingFileNameRef = useRef<string>('');
 
     const { toast } = useToast();
 
@@ -53,6 +56,21 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         return withoutExt || 'file';
     };
 
+    const triggerDownload = (buffer: ArrayBuffer, fileName: string) => {
+        const blob = new Blob([buffer]);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        }, 100);
+    };
+
     const handleRetrieveFile = async (accessCode?: string, sw?: string) => {
         let code = accessCode ? accessCode : takenAccessCode;
         let secW = sw ? sw : takenSecretWord;
@@ -69,6 +87,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         setDownloadComplete(false);
         setDisplayText("");
         setDownloadedFileInfo(null);
+        decryptedBufferRef.current = null;
+        pendingFileNameRef.current = '';
 
         try {
             const response = await fetch(`${URL}/retrieve?accessCode=${code}`, {
@@ -108,17 +128,13 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     expiresAt: expiresAtHeader || undefined
                 };
                 
-                // Auto-download all files (including text)
-                const blob = new Blob([decryptedBuffer]);
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = resolvedFileName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
-
+                // Store for manual download if needed
+                decryptedBufferRef.current = decryptedBuffer;
+                pendingFileNameRef.current = resolvedFileName;
+                
+                // Auto-download immediately
+                triggerDownload(decryptedBuffer, resolvedFileName);
+                
                 // Show text content inline only for .txt files
                 if (isText) {
                     const decoder = new TextDecoder();
@@ -131,7 +147,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 
                 toast({
                     title: "Success",
-                    description: isText ? "File downloaded and ready." : "File downloaded automatically.",
+                    description: isText ? "File ready." : "File downloaded.",
                 });
 
                 onFileRetrieved?.(code, secW);
@@ -155,11 +171,24 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         }
     };
 
+    // Auto-fetch when URL has access code and secret word
     useEffect(() => {
         if (initialAccessCode && initialSecretWord) {
-            handleRetrieveFile(initialAccessCode, initialSecretWord);
+            // Use setTimeout to delay slightly - helps with browser download blocking
+            const timer = setTimeout(() => {
+                handleRetrieveFile(initialAccessCode, initialSecretWord);
+            }, 100);
+            return () => clearTimeout(timer);
         }
     }, [initialAccessCode, initialSecretWord]);
+
+    const handleManualDownload = () => {
+        if (decryptedBufferRef.current && pendingFileNameRef.current) {
+            triggerDownload(decryptedBufferRef.current, pendingFileNameRef.current);
+        } else {
+            handleRetrieveFile();
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -220,7 +249,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
 
                     {!loading && (
                         <Button 
-                            onClick={() => handleRetrieveFile()} 
+                            onClick={handleRetrieveFile} 
                             className="w-full"
                             disabled={!takenAccessCode || !takenSecretWord}
                         >
@@ -230,6 +259,19 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     )}
                 </CardContent>
             </Card>
+
+            {/* Manual download button if auto-download was blocked */}
+            {!loading && downloadComplete && decryptedBufferRef.current && (
+                <Button 
+                    onClick={handleManualDownload} 
+                    className="w-full"
+                    size="lg"
+                    variant="outline"
+                >
+                    <Download className="w-5 h-5 mr-2" />
+                    Download Again
+                </Button>
+            )}
 
             {/* Text content - only for .txt files */}
             {displayText !== "" && downloadComplete && (
@@ -292,7 +334,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 <CheckCircle className="w-4 h-4 mx-auto text-green-600" />
                                 <p className="text-xs font-medium">Status</p>
                                 <p className="text-xs text-gray-600 dark:text-gray-400">
-                                    Downloaded
+                                    Done
                                 </p>
                             </div>
                         </div>
