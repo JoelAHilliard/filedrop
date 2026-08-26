@@ -13,7 +13,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 app.config['CORS_HEADERS'] = 'Content-Type'
-app.config['MAX_CONTENT_LENGTH'] = 250 * 1024 * 1024  # 250MB
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB
 
 # Limits for file lifecycle settings
 DEFAULT_TTL_SECONDS = 24 * 60 * 60
@@ -46,7 +46,7 @@ rate_limit_downloads = {}
 
 def check_and_pause_uploads_downloads():
     global pause_uploads_downloads
-    if global_upload_counter >= 50 or global_upload_size >= 500:
+    if global_upload_counter >= 50 or global_upload_size >= 2000:
         pause_uploads_downloads = True
         print('Uploads/Downloads paused for 1 hour due to high traffic.')
         scheduler = BackgroundScheduler()
@@ -133,7 +133,7 @@ def rate_limit_ok(store, limit):
 
 @app.errorhandler(413)
 def request_too_large(_error):
-    return jsonify({'error': 'File too large. Max size is 250MB.'}), 413
+    return jsonify({'error': 'File too large. Max size is 500MB.'}), 413
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -161,7 +161,7 @@ def upload_file():
     
     file_data = file.read()
     if len(file_data) > app.config['MAX_CONTENT_LENGTH']:
-        return jsonify({'error': 'File too large. Max size is 250MB.'}), 413
+        return jsonify({'error': 'File too large. Max size is 500MB.'}), 413
 
     global_upload_counter += 1
     global_upload_size += len(file_data) / (1024 * 1024)

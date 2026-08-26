@@ -151,11 +151,11 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                 return;
             }
     
-            const maxFileSize = 250 * 1024 * 1024; // 250MB
+            const maxFileSize = 500 * 1024 * 1024; // 500MB
             if (selectedFile.size > maxFileSize) {
                 toast({
                     title: "File Too Large",
-                    description: "File size exceeds the maximum limit of 250MB.",
+                    description: "File size exceeds the maximum limit of 500MB.",
                     variant: "destructive"
                 });
                 setLoading(false);

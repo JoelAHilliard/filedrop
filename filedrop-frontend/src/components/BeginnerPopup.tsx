@@ -49,7 +49,7 @@ export const BeginnerPopup = () => {
           <div class="w-[75%] mx-auto mt-10">
             <Carousel>
                 <CarouselContent>
-                    <CarouselItem className="text-xs flex items-center justify-center text-center font-bold">1. Upload any file under 250MB.</CarouselItem>
+                    <CarouselItem className="text-xs flex items-center justify-center text-center font-bold">1. Upload any file under 500MB.</CarouselItem>
                     <CarouselItem className="text-xs flex items-center justify-center text-center">2. Save your retrieval code (we can't get it back for you).</CarouselItem>
                     <CarouselItem className="text-xs flex items-center justify-center text-center">3. Retrieve it before it expires (up to 3 days).</CarouselItem>
                 </CarouselContent>
