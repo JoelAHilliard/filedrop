@@ -3,6 +3,8 @@ import os
 import unittest
 from unittest.mock import patch
 
+from botocore.exceptions import ClientError
+
 os.environ.update({
     'AWS_EC2_METADATA_DISABLED': 'true',
     'CLOUDFLARE_R2_ENDPOINT': 'http://localhost',
@@ -17,6 +19,24 @@ backend.scheduler.shutdown(wait=False)
 
 
 class RetrievalTest(unittest.TestCase):
+    def test_upload_retries_access_code_collisions(self):
+        collision = ClientError({'Error': {'Code': 'PreconditionFailed'}}, 'PutObject')
+        backend.rate_limit_uploads.clear()
+        backend.pause_uploads_downloads = False
+
+        with patch.object(backend, 'generate_access_code', side_effect=['abcd', 'ef01']), \
+             patch.object(backend.s3_client, 'put_object', side_effect=[collision, {}]) as put:
+            response = backend.app.test_client().post('/upload', data={
+                'file': (io.BytesIO(b'encrypted'), 'file.bin'),
+                'secretWord': 'secret',
+                'iv': 'aXY=',
+                'salt': 'c2FsdA==',
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()['key'], 'ef01')
+        self.assertEqual(put.call_count, 2)
+
     def test_download_is_consumed_only_after_confirmation(self):
         metadata = {
             'iv': 'aXY=',

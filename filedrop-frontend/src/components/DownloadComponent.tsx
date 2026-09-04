@@ -165,15 +165,12 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     setPreviewKind(previewType);
                     setDownloadUrl(url);
 
-                    // Auto-download non-previewable files (not images or PDFs)
-                    if (previewType === 'none') {
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = resolvedFileName;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = resolvedFileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
@@ -235,7 +232,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                             <Input 
                                 id="access-code"
                                 value={takenAccessCode} 
-                                placeholder="e.g., a1b2c3d4e5f6"
+                                placeholder="e.g., a1b2"
                                 onChange={(e) => setTakenAccessCode(e.target.value)}
                                 className="font-mono"
                             />

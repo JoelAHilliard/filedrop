@@ -61,7 +61,7 @@ def check_and_pause_uploads_downloads():
 
 def generate_access_code():
     import secrets
-    return secrets.token_hex(6)
+    return secrets.token_hex(2)
 
 def parse_iso_datetime(value):
     if not value:
@@ -187,29 +187,38 @@ def upload_file():
     
     check_and_pause_uploads_downloads()
     
-    access_code = generate_access_code()
     extension = secure_filename(file.filename).rsplit('.', 1)[-1] if '.' in file.filename else 'bin'
     created_at = datetime.utcnow()
     expires_at = created_at + timedelta(seconds=ttl_seconds)
-    
-    s3_client.put_object(
-        Bucket=os.getenv('S3_BUCKET_NAME'),
-        Key=access_code,
-        Body=file_data,
-        ServerSideEncryption='AES256',
-        ContentType='application/octet-stream',
-        Metadata={
-            'filetype': file_type or 'unknown',
-            'iv': iv,
-            'salt': salt,
-            'extension': extension,
-            'created_at': created_at.isoformat() + 'Z',
-            'ttl_seconds': str(ttl_seconds),
-            'expires_at': expires_at.isoformat() + 'Z',
-            'max_downloads': str(max_downloads),
-            'remaining_downloads': str(max_downloads)
-        }
-    )
+
+    for _ in range(10):
+        access_code = generate_access_code()
+        try:
+            s3_client.put_object(
+                Bucket=os.getenv('S3_BUCKET_NAME'),
+                Key=access_code,
+                Body=file_data,
+                IfNoneMatch='*',
+                ServerSideEncryption='AES256',
+                ContentType='application/octet-stream',
+                Metadata={
+                    'filetype': file_type or 'unknown',
+                    'iv': iv,
+                    'salt': salt,
+                    'extension': extension,
+                    'created_at': created_at.isoformat() + 'Z',
+                    'ttl_seconds': str(ttl_seconds),
+                    'expires_at': expires_at.isoformat() + 'Z',
+                    'max_downloads': str(max_downloads),
+                    'remaining_downloads': str(max_downloads)
+                }
+            )
+            break
+        except ClientError as e:
+            if e.response.get('Error', {}).get('Code') not in {'PreconditionFailed', 'ConditionalRequestConflict', '409', '412'}:
+                raise
+    else:
+        return jsonify({'error': 'Could not allocate an access code. Please retry.'}), 503
     
     return jsonify({
         'message': 'File uploaded successfully',
