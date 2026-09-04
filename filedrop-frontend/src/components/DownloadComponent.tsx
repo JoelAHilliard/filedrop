@@ -165,12 +165,19 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     setPreviewKind(previewType);
                     setDownloadUrl(url);
 
+                    const autoDownloadUrl = window.URL.createObjectURL(
+                        blob.slice(0, blob.size, 'application/octet-stream')
+                    );
                     const link = document.createElement('a');
-                    link.href = url;
+                    link.href = autoDownloadUrl;
                     link.download = resolvedFileName;
+                    link.hidden = true;
                     document.body.appendChild(link);
                     link.click();
-                    document.body.removeChild(link);
+                    setTimeout(() => {
+                        link.remove();
+                        window.URL.revokeObjectURL(autoDownloadUrl);
+                    }, 1000);
                 }
                 
                 setDownloadedFileInfo(downloadInfo);
