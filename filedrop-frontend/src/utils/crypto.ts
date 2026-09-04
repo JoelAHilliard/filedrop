@@ -46,12 +46,18 @@ export async function decryptData(encryptedBuffer: ArrayBuffer, secretWord: stri
         true,
         ['decrypt']
     );
-    const decryptedBuffer = await crypto.subtle.decrypt(
-        { name: 'AES-CBC', iv },
-        key,
-        encryptedBuffer
-    );
-    return decryptedBuffer;
+    try {
+        return await crypto.subtle.decrypt(
+            { name: 'AES-CBC', iv },
+            key,
+            encryptedBuffer
+        );
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'OperationError') {
+            throw new Error('Unable to decrypt this file. Check that the access code and secret word match.');
+        }
+        throw error;
+    }
 }
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {

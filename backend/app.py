@@ -43,6 +43,7 @@ UPLOAD_RATE_LIMIT = 20
 DOWNLOAD_RATE_LIMIT = 60
 rate_limit_uploads = {}
 rate_limit_downloads = {}
+rate_limit_confirmations = {}
 
 def check_and_pause_uploads_downloads():
     global pause_uploads_downloads
@@ -58,9 +59,9 @@ def check_and_pause_uploads_downloads():
         scheduler.start()
         print('Uploads/Downloads resumed.')
 
-def generate_access_code(length=4):
+def generate_access_code():
     import secrets
-    return secrets.token_hex(length)[:length]
+    return secrets.token_hex(6)
 
 def parse_iso_datetime(value):
     if not value:
@@ -130,6 +131,24 @@ def rate_limit_ok(store, limit):
     count += 1
     store[ip] = (window_start, count)
     return count <= limit
+
+def consume_download(access_code, metadata, content_type):
+    remaining_downloads = clamp_int(metadata.get('remaining_downloads'), DEFAULT_MAX_DOWNLOADS, 0, MAX_DOWNLOADS_LIMIT)
+    if remaining_downloads <= 1:
+        s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
+    else:
+        metadata = dict(metadata)
+        metadata['remaining_downloads'] = str(remaining_downloads - 1)
+        s3_client.copy_object(
+            Bucket=os.getenv('S3_BUCKET_NAME'),
+            Key=access_code,
+            CopySource={'Bucket': os.getenv('S3_BUCKET_NAME'), 'Key': access_code},
+            Metadata=metadata,
+            MetadataDirective='REPLACE',
+            ContentType=content_type,
+            ServerSideEncryption='AES256'
+        )
+    return max(remaining_downloads - 1, 0)
 
 @app.errorhandler(413)
 def request_too_large(_error):
@@ -245,24 +264,9 @@ def retrieve_file():
         response.headers['X-MAX-DOWNLOADS'] = str(max_downloads)
         response.headers['Access-Control-Expose-Headers'] = 'X-IV, X-SALT, X-EXTENSION, X-EXPIRES-AT, X-REMAINING-DOWNLOADS, X-MAX-DOWNLOADS'
 
-        if remaining_downloads <= 1:
-            s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
-        else:
-            updated_metadata = dict(metadata)
-            updated_metadata['remaining_downloads'] = str(remaining_downloads - 1)
-            updated_metadata['max_downloads'] = str(max_downloads)
-            updated_metadata['created_at'] = (created_at.isoformat() + 'Z') if created_at else metadata.get('created_at', '')
-            updated_metadata['ttl_seconds'] = str(ttl_seconds)
-            updated_metadata['expires_at'] = expires_at.isoformat() + 'Z'
-            s3_client.copy_object(
-                Bucket=os.getenv('S3_BUCKET_NAME'),
-                Key=access_code,
-                CopySource={'Bucket': os.getenv('S3_BUCKET_NAME'), 'Key': access_code},
-                Metadata=updated_metadata,
-                MetadataDirective='REPLACE',
-                ContentType=s3_response.get('ContentType', 'application/octet-stream'),
-                ServerSideEncryption='AES256'
-            )
+        # Older clients consume immediately; current clients confirm after successful decryption.
+        if request.args.get('deferConsumption') != '1':
+            consume_download(access_code, metadata, s3_response.get('ContentType', 'application/octet-stream'))
 
         return response
     except ClientError as e:
@@ -273,6 +277,30 @@ def retrieve_file():
     except Exception as e:
         print(f"Error: {e}")
         return Response("Server error", status=500)
+
+
+@app.route('/confirm-retrieval', methods=['POST'])
+def confirm_retrieval():
+    if not rate_limit_ok(rate_limit_confirmations, DOWNLOAD_RATE_LIMIT):
+        return jsonify({'error': 'Too many downloads from this IP. Please slow down.'}), 429
+
+    access_code = request.args.get('accessCode')
+    if not access_code:
+        return jsonify({'error': 'Access code is required'}), 400
+
+    try:
+        head = s3_client.head_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
+        remaining_downloads = consume_download(
+            access_code,
+            head.get('Metadata', {}),
+            head.get('ContentType', 'application/octet-stream')
+        )
+        return jsonify({'remainingDownloads': remaining_downloads})
+    except ClientError as e:
+        if e.response.get('Error', {}).get('Code') == 'NoSuchKey':
+            return jsonify({'error': 'File not found.'}), 404
+        print(f"Error: {e}")
+        return jsonify({'error': 'Server error'}), 500
 
 
 @app.route('/')

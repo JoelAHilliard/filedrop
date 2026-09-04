@@ -110,7 +110,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             return null;
         });
         try {
-            const response = await fetch(`${URL}/retrieve?accessCode=${code}`, {
+            const response = await fetch(`${URL}/retrieve?accessCode=${encodeURIComponent(code.trim())}&deferConsumption=1`, {
                 method: 'GET'
             });
             if (response.ok) {
@@ -129,7 +129,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                 const iv = new Uint8Array(base64ToArrayBuffer(ivB64));
                 const salt = new Uint8Array(base64ToArrayBuffer(saltB64));
 
-                const decryptedBuffer = await decryptData(encryptedBuffer, secW, iv, salt);
+                const decryptedBuffer = await decryptData(encryptedBuffer, secW.trim(), iv, salt);
+                navigator.sendBeacon(`${URL}/confirm-retrieval?accessCode=${encodeURIComponent(code.trim())}`);
                 
                 const resolvedBaseName = normalizeFileBase(fileBaseName);
                 const resolvedFileName = extension === 'txt' ? `file.${extension}` : `${resolvedBaseName}.${extension}`;
@@ -234,7 +235,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                             <Input 
                                 id="access-code"
                                 value={takenAccessCode} 
-                                placeholder="e.g., ro23" 
+                                placeholder="e.g., a1b2c3d4e5f6"
                                 onChange={(e) => setTakenAccessCode(e.target.value)}
                                 className="font-mono"
                             />
