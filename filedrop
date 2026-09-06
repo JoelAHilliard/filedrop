@@ -109,13 +109,17 @@ upload_file() {
   salt_b64=$(hex_to_b64 "$salt_hex")
 
   local response
-  response=$(curl -sS -w '\n%{http_code}' \
+  if ! response=$(curl --connect-timeout 10 --max-time 1800 --speed-time 60 --speed-limit 1 -sS -w '\n%{http_code}' \
     -F "file=@${tmp_enc};filename=$(basename "$file_path")" \
     -F "type=${mime_type}" \
     -F "secretWord=${secret_word}" \
     -F "iv=${iv_b64}" \
     -F "salt=${salt_b64}" \
-    "${url}/upload")
+    "${url}/upload"); then
+    rm -f "$tmp_enc"
+    echo "Upload failed or timed out." >&2
+    exit 1
+  fi
 
   rm -f "$tmp_enc"
 
@@ -148,8 +152,12 @@ download_file() {
   tmp_enc=$(mktemp)
 
   local status
-  status=$(curl -sS -o "$tmp_enc" -D "$tmp_headers" -w "%{http_code}" \
-    "${url}/retrieve?accessCode=${access_code}&deferConsumption=1")
+  if ! status=$(curl --connect-timeout 10 --max-time 1800 --speed-time 60 --speed-limit 1 -sS -o "$tmp_enc" -D "$tmp_headers" -w "%{http_code}" \
+    "${url}/retrieve?accessCode=${access_code}&deferConsumption=1"); then
+    rm -f "$tmp_headers" "$tmp_enc"
+    echo "Download failed or timed out." >&2
+    exit 1
+  fi
 
   if [[ "$status" != "200" ]]; then
     echo "Download failed (${status}):" >&2
@@ -191,7 +199,7 @@ download_file() {
     exit 1
   fi
 
-  curl -fsS -X POST "${url}/confirm-retrieval?accessCode=${access_code}" >/dev/null || \
+  curl --connect-timeout 5 --max-time 15 -fsS -X POST "${url}/confirm-retrieval?accessCode=${access_code}" >/dev/null || \
     echo "Warning: downloaded successfully, but the server could not update the download count." >&2
 
   rm -f "$tmp_headers" "$tmp_enc"

@@ -3,8 +3,7 @@ from flask import Flask, Response, request, jsonify
 from werkzeug.utils import secure_filename
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
-from apscheduler.schedulers.background import BackgroundScheduler
+from botocore.exceptions import ClientError, ConnectionClosedError, ConnectTimeoutError, EndpointConnectionError, ReadTimeoutError
 from datetime import datetime, timedelta
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -29,13 +28,13 @@ s3_client = boto3.client(
     endpoint_url=os.getenv('CLOUDFLARE_R2_ENDPOINT'),
     aws_access_key_id=os.getenv('S3_ACCESS_Key'),
     aws_secret_access_key=os.getenv('S3_SECRET_ACCESS_KEY'),
-    config=Config(s3={'addressing_style': 'path'})
+    config=Config(
+        s3={'addressing_style': 'path'},
+        connect_timeout=5,
+        read_timeout=60,
+        retries={'mode': 'standard', 'total_max_attempts': 3},
+    )
 )
-
-# Global counters and pause state
-global_upload_counter = 0
-global_upload_size = 0  # in MB
-pause_uploads_downloads = False
 
 # Basic in-memory rate limiting (per IP, per endpoint)
 RATE_LIMIT_WINDOW_SECONDS = 60
@@ -44,20 +43,6 @@ DOWNLOAD_RATE_LIMIT = 60
 rate_limit_uploads = {}
 rate_limit_downloads = {}
 rate_limit_confirmations = {}
-
-def check_and_pause_uploads_downloads():
-    global pause_uploads_downloads
-    if global_upload_counter >= 50 or global_upload_size >= 2000:
-        pause_uploads_downloads = True
-        print('Uploads/Downloads paused for 1 hour due to high traffic.')
-        scheduler = BackgroundScheduler()
-        scheduler.add_job(
-            lambda: globals().update(pause_uploads_downloads=False),
-            'date',
-            run_date=datetime.now() + timedelta(hours=1)
-        )
-        scheduler.start()
-        print('Uploads/Downloads resumed.')
 
 def generate_access_code():
     import secrets
@@ -83,38 +68,31 @@ def clamp_int(value, default, min_value=None, max_value=None):
     return parsed
 
 def delete_old_files():
-    try:
-        response = s3_client.list_objects_v2(Bucket=os.getenv('S3_BUCKET_NAME'))
-        if 'Contents' not in response:
-            print("No old files to delete.")
-            return
-        now = datetime.utcnow()
+    bucket = os.getenv('S3_BUCKET_NAME')
+    now = datetime.utcnow()
+    # ponytail: sequential HEADs in a separate job; add bounded concurrency if runs overlap.
+    for page in s3_client.get_paginator('list_objects_v2').paginate(Bucket=bucket):
         to_delete = []
-        for obj in response['Contents']:
+        for obj in page.get('Contents', []):
             key = obj['Key']
             try:
-                head = s3_client.head_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=key)
-                metadata = head.get('Metadata', {})
-                created_at = parse_iso_datetime(metadata.get('created_at'))
-                ttl_seconds = clamp_int(metadata.get('ttl_seconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
-                if not created_at:
-                    created_at = obj['LastModified'].replace(tzinfo=None)
-                expires_at = created_at + timedelta(seconds=ttl_seconds)
-                remaining_downloads = clamp_int(metadata.get('remaining_downloads'), DEFAULT_MAX_DOWNLOADS, 0, MAX_DOWNLOADS_LIMIT)
-                if remaining_downloads <= 0 or now >= expires_at:
-                    to_delete.append({'Key': key})
-            except Exception as e:
-                print(f"Error checking file {key}: {e}")
+                head = s3_client.head_object(Bucket=bucket, Key=key)
+            except ClientError as e:
+                if e.response.get('Error', {}).get('Code') in {'404', 'NoSuchKey'}:
+                    continue
+                raise
+            metadata = head.get('Metadata', {})
+            created_at = parse_iso_datetime(metadata.get('created_at')) or obj['LastModified'].replace(tzinfo=None)
+            ttl_seconds = clamp_int(metadata.get('ttl_seconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
+            expires_at = parse_iso_datetime(metadata.get('expires_at')) or created_at + timedelta(seconds=ttl_seconds)
+            remaining_downloads = clamp_int(metadata.get('remaining_downloads'), DEFAULT_MAX_DOWNLOADS, 0, MAX_DOWNLOADS_LIMIT)
+            if remaining_downloads <= 0 or now >= expires_at:
+                to_delete.append({'Key': key})
         if to_delete:
-            s3_client.delete_objects(
-                Bucket=os.getenv('S3_BUCKET_NAME'),
-                Delete={'Objects': to_delete, 'Quiet': False}
-            )
+            result = s3_client.delete_objects(Bucket=bucket, Delete={'Objects': to_delete})
+            if result.get('Errors'):
+                raise RuntimeError(f"Cleanup failed: {result['Errors']}")
             print(f"Deleted {len(to_delete)} old files.")
-        else:
-            print("No old files to delete.")
-    except Exception as e:
-        print(f"Error in deleting old files: {e}")
 
 def get_client_ip():
     forwarded = request.headers.get('X-Forwarded-For', '')
@@ -150,16 +128,21 @@ def consume_download(access_code, metadata, content_type):
         )
     return max(remaining_downloads - 1, 0)
 
+@app.errorhandler(ConnectionClosedError)
+@app.errorhandler(ConnectTimeoutError)
+@app.errorhandler(EndpointConnectionError)
+@app.errorhandler(ReadTimeoutError)
+def storage_unavailable(error):
+    app.logger.warning('Storage unavailable: %s', error)
+    return jsonify({'error': 'Storage unavailable or timed out. Please try again.'}), 504
+
+
 @app.errorhandler(413)
 def request_too_large(_error):
     return jsonify({'error': 'File too large. Max size is 500MB.'}), 413
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global global_upload_counter, global_upload_size
-    if pause_uploads_downloads:
-        return jsonify({'error': 'Service temporarily unavailable due to high traffic.'}), 503
-
     if not rate_limit_ok(rate_limit_uploads, UPLOAD_RATE_LIMIT):
         return jsonify({'error': 'Too many uploads from this IP. Please slow down.'}), 429
     
@@ -178,26 +161,18 @@ def upload_file():
     if not file or not secret_word or not iv or not salt:
         return jsonify({'error': 'Missing file, secret word, iv or salt'}), 400
     
-    file_data = file.read()
-    if len(file_data) > app.config['MAX_CONTENT_LENGTH']:
-        return jsonify({'error': 'File too large. Max size is 500MB.'}), 413
-
-    global_upload_counter += 1
-    global_upload_size += len(file_data) / (1024 * 1024)
-    
-    check_and_pause_uploads_downloads()
-    
     extension = secure_filename(file.filename).rsplit('.', 1)[-1] if '.' in file.filename else 'bin'
     created_at = datetime.utcnow()
     expires_at = created_at + timedelta(seconds=ttl_seconds)
 
     for _ in range(10):
         access_code = generate_access_code()
+        file.stream.seek(0)
         try:
             s3_client.put_object(
                 Bucket=os.getenv('S3_BUCKET_NAME'),
                 Key=access_code,
-                Body=file_data,
+                Body=file.stream,
                 IfNoneMatch='*',
                 ServerSideEncryption='AES256',
                 ContentType='application/octet-stream',
@@ -230,9 +205,6 @@ def upload_file():
 
 @app.route('/retrieve', methods=['GET'])
 def retrieve_file():
-    if pause_uploads_downloads:
-        return jsonify({'error': 'Service temporarily unavailable due to high traffic.'}), 503
-
     if not rate_limit_ok(rate_limit_downloads, DOWNLOAD_RATE_LIMIT):
         return jsonify({'error': 'Too many downloads from this IP. Please slow down.'}), 429
     
@@ -240,9 +212,10 @@ def retrieve_file():
     if not access_code:
         return jsonify({'error': 'Access code is required'}), 400
 
+    body = None
     try:
         s3_response = s3_client.get_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
-        encrypted_data = s3_response['Body'].read()
+        body = s3_response['Body']
         metadata = s3_response.get('Metadata', {})
         iv = metadata.get('iv', '').replace(' ', '+')
         salt = metadata.get('salt', '').replace(' ', '+')
@@ -257,14 +230,26 @@ def retrieve_file():
         max_downloads = clamp_int(metadata.get('max_downloads'), DEFAULT_MAX_DOWNLOADS, 1, MAX_DOWNLOADS_LIMIT)
 
         if datetime.utcnow() >= expires_at:
+            body.close()
             s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
             return jsonify({'error': 'File expired.'}), 410
 
         if remaining_downloads <= 0:
+            body.close()
             s3_client.delete_object(Bucket=os.getenv('S3_BUCKET_NAME'), Key=access_code)
             return jsonify({'error': 'Download limit reached.'}), 410
 
-        response = Response(encrypted_data, mimetype='application/octet-stream')
+        def chunks():
+            try:
+                while chunk := body.read(256 * 1024):
+                    yield chunk
+            finally:
+                body.close()
+
+        response = Response(chunks(), mimetype='application/octet-stream')
+        response.call_on_close(body.close)
+        if 'ContentLength' in s3_response:
+            response.content_length = s3_response['ContentLength']
         response.headers['X-IV'] = iv
         response.headers['X-SALT'] = salt
         response.headers['X-EXTENSION'] = metadata.get('extension', 'bin')
@@ -275,16 +260,27 @@ def retrieve_file():
 
         # Older clients consume immediately; current clients confirm after successful decryption.
         if request.args.get('deferConsumption') != '1':
+            # Legacy clients cannot confirm; finish reading before consuming their file.
+            response.set_data(body.read())
+            body.close()
             consume_download(access_code, metadata, s3_response.get('ContentType', 'application/octet-stream'))
 
         return response
     except ClientError as e:
+        if body is not None:
+            body.close()
         if e.response.get('Error', {}).get('Code') == 'NoSuchKey':
             return jsonify({'error': 'File not found.'}), 404
         print(f"Error: {e}")
         return Response("Server error", status=500)
+    except (ConnectionClosedError, ConnectTimeoutError, EndpointConnectionError, ReadTimeoutError) as e:
+        if body is not None:
+            body.close()
+        return storage_unavailable(e)
     except Exception as e:
-        print(f"Error: {e}")
+        if body is not None:
+            body.close()
+        app.logger.exception('Retrieval failed')
         return Response("Server error", status=500)
 
 
@@ -306,7 +302,7 @@ def confirm_retrieval():
         )
         return jsonify({'remainingDownloads': remaining_downloads})
     except ClientError as e:
-        if e.response.get('Error', {}).get('Code') == 'NoSuchKey':
+        if e.response.get('Error', {}).get('Code') in {'404', 'NoSuchKey'}:
             return jsonify({'error': 'File not found.'}), 404
         print(f"Error: {e}")
         return jsonify({'error': 'Server error'}), 500
@@ -316,17 +312,10 @@ def confirm_retrieval():
 def home():
     return "Hello", 200
 
-# Schedule periodic tasks
-scheduler = BackgroundScheduler()
-scheduler.add_job(delete_old_files, 'interval', minutes=30)
-scheduler.add_job(
-    lambda: globals().update(global_upload_counter=0, global_upload_size=0),
-    'interval',
-    minutes=30
-)
-scheduler.start()
-
 if __name__ == '__main__':
-    port = 4000
-    print(f"Server is running on port {port}.")
-    app.run(host='0.0.0.0', port=port)
+    import sys
+    if sys.argv[1:] == ['cleanup']:
+        delete_old_files()
+    else:
+        port = int(os.getenv('PORT', '4000'))
+        app.run(host='0.0.0.0', port=port)

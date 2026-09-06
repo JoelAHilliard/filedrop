@@ -111,7 +111,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
         });
         try {
             const response = await fetch(`${URL}/retrieve?accessCode=${encodeURIComponent(code.trim())}&deferConsumption=1`, {
-                method: 'GET'
+                method: 'GET',
+                signal: AbortSignal.timeout(30 * 60 * 1000),
             });
             if (response.ok) {
                 const ivB64 = response.headers.get('X-IV');

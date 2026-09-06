@@ -22,6 +22,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
     const [givenAccessCode, setGivenAccessCode] = useState('');
     const [inputText, setInputText] = useState('');
     const [loading, setLoading] = useState(false);
+    const [uploadStage, setUploadStage] = useState('Encrypting...');
     const [uploadFile, setUploadFile] = useState(true);
     const [secretWord, setSecretWord] = useState('');
     const [showSecretWord, setShowSecretWord] = useState(false);
@@ -67,9 +68,11 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
         setLoading(true);
         setUploadComplete(false);
         setExpiresAt('');
+        setUploadStage('Encrypting...');
 
+        try {
         const index = Math.floor(Math.random() * wordList.length);
-        const sw = wordList[index].replace("\r","");
+        const sw = wordList[index]?.trim();
         
         if (!sw) {
             toast({
@@ -95,6 +98,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             setFileSize(buffer.byteLength);
             
             const { encryptedBuffer, iv, salt } = await encryptData(buffer, sw);
+            setUploadStage('Uploading text...');
             const downloadsLimit = burnAfterRead ? 1 : maxDownloads;
             const ttlSeconds = Math.max(1, ttlHours) * 3600;
             const formData = new FormData();
@@ -110,6 +114,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                 const response = await fetch(`${URL}/upload`, {
                     method: 'POST',
                     body: formData,
+                    signal: AbortSignal.timeout(30 * 60 * 1000),
                 });
                 if (response.ok) {
                     const data = await response.json();
@@ -165,6 +170,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             let fileData = await selectedFile.arrayBuffer();
             
             const { encryptedBuffer, iv, salt } = await encryptData(fileData, sw);
+            setUploadStage('Uploading file...');
             const downloadsLimit = burnAfterRead ? 1 : maxDownloads;
             const ttlSeconds = Math.max(1, ttlHours) * 3600;
             const formData = new FormData();
@@ -180,6 +186,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                 const response = await fetch(`${URL}/upload`, {
                     method: 'POST',
                     body: formData,
+                    signal: AbortSignal.timeout(30 * 60 * 1000),
                 });
                 if (response.ok) {
                     const data = await response.json();
@@ -210,6 +217,15 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             } finally {
                 setLoading(false);
             }
+        }
+        } catch (error) {
+            toast({
+                title: 'Upload Failed',
+                description: error instanceof Error ? error.message : 'Unable to prepare upload.',
+                variant: 'destructive',
+            });
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -357,7 +373,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                             <div className="text-center">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-white mx-auto mb-4"></div>
                                 <p className="text-gray-600 dark:text-gray-400">
-                                    {uploadFile ? 'Uploading file...' : 'Uploading text...'}
+                                    {uploadStage}
                                 </p>
                             </div>
                         </div>
