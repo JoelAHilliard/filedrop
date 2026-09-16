@@ -79,10 +79,32 @@ npm run dev
 
 ### CLI
 
-```bash
-# Upload a file
-./filedrop ./photo.jpg
+No build step. The `./filedrop` script is standalone; needs `openssl`, `curl`, `python3` (already on most Linux/macOS boxes).
 
-# Download a file
-./filedrop download <accessCode> <secretWord> --out ./photo.jpg
+Run it directly from a checkout:
+
+```bash
+./filedrop ./photo.jpg
+```
+
+Or install it on your PATH so it works anywhere (symlink keeps repo edits live):
+
+```bash
+mkdir -p ~/.local/bin
+ln -s "$PWD/filedrop" ~/.local/bin/filedrop
+# ensure ~/.local/bin is on your PATH
+```
+
+```bash
+# Upload (interactive: asks y/N in a terminal). Print a copy-paste download line.
+filedrop ./photo.jpg
+filedrop ./report.pdf --secret myword      # fix the secret (easy to type)
+filedrop ./big.bin --yes                    # skip confirmation (agents/pipes)
+echo "hello" | filedrop - --yes             # upload from stdin
+
+# Download (parent dirs of --out are created; omit --out -> filedrop-<code>.<ext>)
+filedrop download <accessCode> <secretWord> --out ./photo.jpg
+
+# Full agent-facing docs
+filedrop --help
 ```

@@ -6,14 +6,46 @@ WORDLIST_PATH="filedrop-frontend/public/bip39.txt"
 
 usage() {
   cat <<'EOF'
-Usage:
-  filedrop <filePath> [--secret <word>] [--url <baseUrl>] [--type <mime>]
-  filedrop download <accessCode> <secretWord> [--out <filePath>] [--url <baseUrl>]
+filedrop - end-to-end encrypted, no-account file sharing between machines.
+Upload a file, get a one-line download command. Paste that line on any other
+box and it fetches the file. No login, files expire on a TTL, encrypted with
+AES-256 (server never sees plaintext). Each share is one access code + one
+secret word; either alone is useless.
 
-Examples:
+USAGE
+  filedrop upload <file> [opts]                upload a file
+  filedrop <file> [opts]                       same, shorthand
+  filedrop - [opts]                            upload from stdin (pipes work)
+  filedrop download <code> <secret> [opts]     fetch a shared file
+
+UPLOAD OPTIONS
+  --secret <word>    secret word for the download link (auto-picked if omitted)
+  --yes, -y          skip the interactive y/N confirmation (needed for agents/pipes)
+  --url <base>       alternate server (default: https://fd.up.railway.app)
+  --type <mime>      force MIME type (server stores it as metadata)
+
+DOWNLOAD OPTIONS
+  --out <path>       where to save (parent dirs are created); omit -> filedrop-<code>.<ext> in cwd
+  --url <base>       alternate server (must match the one used for upload)
+
+HOW AN AGENT USES IT
+  1. filedrop <file> --yes
+     -> stdout:
+         Access code: 6e6c
+         Secret word: some-word
+         Copy-paste to download elsewhere:
+           filedrop download 6e6c some-word
+  2. Send that whole 2nd command to the receiver (or parse the code+secret).
+  3. Receiver runs it: filedrop download 6e6c some-word [--out dest/path]
+     -> prints 'Saved to <path>'. Exit 0 on success, non-zero on failure.
+  Non-interactive runs (piped stdin, no TTY) skip confirmation automatically.
+
+EXAMPLES
   filedrop ./photo.jpg
-  filedrop ./report.pdf --secret myword
-  filedrop download ab12 secretword --out ./report.pdf
+  filedrop ./report.pdf --secret myword        # fixed secret, easy to type
+  filedrop ./big.bin --yes                      # non-interactive
+  echo "hello" | filedrop - --yes               # stdin, temp filename .txt
+  filedrop download 6e6c some-word --out ./photo.jpg
 EOF
 }
 
@@ -135,8 +167,12 @@ upload_file() {
   python3 - <<'PY' "$body" "$secret_word"
 import json, sys
 data = json.loads(sys.argv[1])
-print(f"Access code: {data.get('key', '')}")
+key = data.get('key', '')
+print(f"Access code: {key}")
 print(f"Secret word: {sys.argv[2]}")
+print()
+print(f"Copy-paste to download elsewhere:")
+print(f"  filedrop download {key} {sys.argv[2]}")
 PY
 }
 
@@ -192,6 +228,7 @@ download_file() {
   if [[ -z "$final_path" ]]; then
     final_path="filedrop-${access_code}.${extension}"
   fi
+  mkdir -p "$(dirname -- "$final_path")"
 
   if ! openssl enc -d -aes-256-cbc -K "$key_hex" -iv "$iv_hex" -in "$tmp_enc" -out "$final_path"; then
     rm -f "$tmp_headers" "$tmp_enc" "$final_path"
@@ -218,6 +255,18 @@ main() {
 
   local cmd="$1"
   shift || true
+
+  # upload is an explicit verb (symmetric with download); everything else is a file path.
+  if [[ "$cmd" == "upload" ]]; then
+    if [[ $# -lt 1 ]]; then
+      usage
+      exit 1
+    fi
+    file_path="$1"
+    shift
+  else
+    file_path="$cmd"
+  fi
 
   if [[ "$cmd" == "download" || "$cmd" == "get" ]]; then
     if [[ $# -lt 2 ]]; then
@@ -249,7 +298,11 @@ main() {
     exit 0
   fi
 
-  local file_path="$cmd"
+  :
+  if [[ "$file_path" == "-" ]]; then
+    file_path=$(mktemp --suffix=.txt)
+    cat > "$file_path"
+  fi
   if [[ ! -f "$file_path" ]]; then
     echo "File not found: $file_path" >&2
     exit 1
@@ -258,6 +311,7 @@ main() {
   local secret_word=""
   local url="$DEFAULT_URL"
   local mime_type=""
+  local assume_yes=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --secret)
@@ -271,6 +325,10 @@ main() {
       --type)
         mime_type="$2"
         shift 2
+        ;;
+      --yes|-y)
+        assume_yes=1
+        shift
         ;;
       *)
         echo "Unknown option: $1" >&2
@@ -288,7 +346,20 @@ main() {
     mime_type=$(detect_mime_type "$file_path")
   fi
 
+  # Confirm before uploading (skipped for -y or non-interactive/agent runs).
+  if [[ "$assume_yes" -eq 0 && -t 0 ]]; then
+    local confirm=""
+    read -r -p "Upload $(basename "$file_path") ($(du -h "$file_path" | cut -f1)) to $(normalize_url "$url")? [y/N] " confirm || confirm=""
+    case "$confirm" in
+      y|Y|yes|Yes|YES) ;;
+      *) echo "Aborted." >&2; exit 1 ;;
+    esac
+  fi
+
   upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type"
+  if [[ "$cmd" == "-" || "$cmd" == "upload" ]]; then
+    rm -f "$file_path"
+  fi
 }
 
 main "$@"
