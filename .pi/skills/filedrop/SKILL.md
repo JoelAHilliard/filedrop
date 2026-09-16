@@ -38,8 +38,9 @@ pass `--yes` to be explicit and avoid a hang if a TTY is present.
 filedrop ./photo.jpg --yes
 filedrop ./report.pdf --secret myword --yes    # fixed secret (easy to relay)
 echo "hello" | filedrop - --yes                 # stdin; saved as a .txt name
-# Capture just the download line (nothing else on stdout):
-cmd=$(filedrop ./report.pdf --yes --copy)   # -> 'filedrop download <code> <secret>'
+# --copy: upload, then put the `filedrop download <code> <secret>` line on the OS
+# clipboard (uses wl-copy/pbcopy/xclip/xsel). stdout stays clean for piping.
+filedrop ./report.pdf --yes --copy
 ```
 
 stdout looks like:

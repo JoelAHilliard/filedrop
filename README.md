@@ -101,8 +101,7 @@ filedrop ./photo.jpg
 filedrop ./report.pdf --secret myword      # fix the secret (easy to type)
 filedrop ./big.bin --yes                    # skip confirmation (agents/pipes)
 echo "hello" | filedrop - --yes             # upload from stdin
-# --copy: emit only the download line, easy to capture/relay
-cmd=$(filedrop ./report.pdf --yes --copy)   # -> 'filedrop download <code> <secret>'
+filedrop ./report.pdf --yes --copy          # upload + put the download line on the clipboard
 
 # Download (parent dirs of --out are created; omit --out -> filedrop-<code>.<ext>)
 filedrop download <accessCode> <secretWord> --out ./photo.jpg

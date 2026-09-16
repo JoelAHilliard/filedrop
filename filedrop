@@ -23,8 +23,10 @@ UPLOAD OPTIONS
   --yes, -y          skip the interactive y/N confirmation (needed for agents/pipes)
   --url <base>       alternate server (default: https://fd.up.railway.app)
   --type <mime>      force MIME type (server stores it as metadata)
-  --copy             print ONLY the `filedrop download <code> <secret>` line
-                     (nothing else) so it can be captured: cmd=$(filedrop f --copy --yes)
+  --copy             upload AND copy the `filedrop download <code> <secret>`
+                     line to your OS clipboard (needs wl-copy/pbcopy/xclip); the
+                     confirm + command echo go to stderr, stdout stays clean unless
+                     no clipboard tool is found (then it prints the line).
 
 DOWNLOAD OPTIONS
   --out <path>       where to save (parent dirs are created); omit -> filedrop-<code>.<ext> in cwd
@@ -370,7 +372,35 @@ main() {
     esac
   fi
 
-  upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type" "$copy_only"
+  local clipboard
+  if [[ "$copy_only" -eq 1 ]]; then
+    local dline
+    dline=$(upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type" "$copy_only")
+    if command -v wl-copy >/dev/null 2>&1; then
+      clipboard=wl-copy
+    elif command -v pbcopy >/dev/null 2>&1; then
+      clipboard=pbcopy
+    elif command -v xclip >/dev/null 2>&1; then
+      clipboard=xclip -selection clipboard
+    elif command -v xsel >/dev/null 2>&1; then
+      clipboard="xsel --clipboard --input"
+    fi
+    if [[ -n "$clipboard" ]]; then
+      if [[ "$clipboard" == xclip* ]]; then
+        printf '%s' "$dline" | xclip -selection clipboard
+      elif [[ "$clipboard" == xsel* ]]; then
+        printf '%s' "$dline" | xsel --clipboard --input
+      else
+        "$clipboard" < <(printf '%s' "$dline")
+      fi
+      echo "Copied to clipboard: $dline" >&2
+    else
+      # no clipboard tool — fall back to printing so it can be copied by hand
+      printf '%s\n' "$dline"
+    fi
+  else
+    upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type" "$copy_only"
+  fi
   if [[ "$cmd" == "-" || "$cmd" == "upload" ]]; then
     rm -f "$file_path"
   fi
