@@ -18,12 +18,15 @@ AES-256; the server never sees plaintext. A share = one **access code** + one
 
 ## Setup (once, if `filedrop` is not on PATH)
 
+Tailscale-style one-liner (served at `filedrop.xyz`, GitHub-raw fallback):
+
 ```bash
-# super-easy one-liner (any Linux/macOS with openssl/curl/python3):
-curl -fsSL https://raw.githubusercontent.com/JoelAHilliard/filedrop/main/filedrop -o ~/.local/bin/filedrop && chmod +x ~/.local/bin/filedrop
-# or from a checkout:
-./filedrop --install
+curl -fsSL https://filedrop.xyz/install.sh | sh
+# or, no domain yet:
+curl -fsSL https://raw.githubusercontent.com/JoelAHilliard/filedrop/main/install.sh | sh
 ```
+
+Or from a checkout: `./filedrop --install`.
 
 Needs `openssl`, `curl`, `python3`. No build step.
 

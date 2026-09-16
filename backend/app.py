@@ -1,5 +1,5 @@
 import os
-from flask import Flask, Response, request, jsonify
+from flask import Flask, Response, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import boto3
 from botocore.config import Config
@@ -311,6 +311,29 @@ def confirm_retrieval():
 @app.route('/')
 def home():
     return "Hello", 200
+
+
+@app.route('/install')
+@app.route('/install.sh')
+def serve_install():
+    # Clients run:  curl -fsSL https://filedrop.xyz/install.sh | sh
+    here = os.path.dirname(os.path.abspath(__file__))
+    return send_file(
+        os.path.join(here, '..', 'install.sh'),
+        mimetype='text/x-shellscript',
+        as_attachment=False,
+    )
+
+
+@app.route('/filedrop')
+def serve_cli():
+    # The CLI itself, so `install.sh` on this host can fetch it same-origin.
+    here = os.path.dirname(os.path.abspath(__file__))
+    return send_file(
+        os.path.join(here, '..', 'filedrop'),
+        mimetype='application/octet-stream',
+        as_attachment=False,
+    )
 
 if __name__ == '__main__':
     import sys

@@ -81,10 +81,16 @@ npm run dev
 
 No build step. The `./filedrop` script is standalone; needs `openssl`, `curl`, `python3` (already on most Linux/macOS boxes).
 
-**Install on any machine — one line (super-easy):**
+**Install on any machine — one line (tailscale-style):**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/JoelAHilliard/filedrop/main/filedrop -o ~/.local/bin/filedrop && chmod +x ~/.local/bin/filedrop
+curl -fsSL https://filedrop.xyz/install.sh | sh
+```
+
+(No domain? GitHub raw also works today):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/JoelAHilliard/filedrop/main/install.sh | sh
 ```
 
 Or from a checkout:
@@ -92,12 +98,6 @@ Or from a checkout:
 ```bash
 git clone https://github.com/JoelAHilliard/filedrop
 ./filedrop --install      # drops a copy into ~/.local/bin
-```
-
-Run it directly from a checkout:
-
-```bash
-./filedrop ./photo.jpg
 ```
 
 Or symlink the checkout onto PATH (keeps repo edits live):
