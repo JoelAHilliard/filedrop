@@ -23,6 +23,8 @@ UPLOAD OPTIONS
   --yes, -y          skip the interactive y/N confirmation (needed for agents/pipes)
   --url <base>       alternate server (default: https://fd.up.railway.app)
   --type <mime>      force MIME type (server stores it as metadata)
+  --copy             print ONLY the `filedrop download <code> <secret>` line
+                     (nothing else) so it can be captured: cmd=$(filedrop f --copy --yes)
 
 DOWNLOAD OPTIONS
   --out <path>       where to save (parent dirs are created); omit -> filedrop-<code>.<ext> in cwd
@@ -122,6 +124,7 @@ upload_file() {
   local secret_word="$2"
   local url="$3"
   local mime_type="$4"
+  local copy_only="${5:-0}"
 
   local salt_hex
   local iv_hex
@@ -164,15 +167,21 @@ upload_file() {
     exit 1
   fi
 
-  python3 - <<'PY' "$body" "$secret_word"
+  python3 - <<'PY' "$body" "$secret_word" "$copy_only"
 import json, sys
 data = json.loads(sys.argv[1])
 key = data.get('key', '')
-print(f"Access code: {key}")
-print(f"Secret word: {sys.argv[2]}")
-print()
-print(f"Copy-paste to download elsewhere:")
-print(f"  filedrop download {key} {sys.argv[2]}")
+s = sys.argv[2]
+copy_only = sys.argv[3] == '1'
+dline = f"filedrop download {key} {s}"
+if copy_only:
+    print(dline)
+else:
+    print(f"Access code: {key}")
+    print(f"Secret word: {s}")
+    print()
+    print(f"Copy-paste to download elsewhere:")
+    print(f"  {dline}")
 PY
 }
 
@@ -312,6 +321,7 @@ main() {
   local url="$DEFAULT_URL"
   local mime_type=""
   local assume_yes=0
+  local copy_only=0
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --secret)
@@ -328,6 +338,10 @@ main() {
         ;;
       --yes|-y)
         assume_yes=1
+        shift
+        ;;
+      --copy)
+        copy_only=1
         shift
         ;;
       *)
@@ -356,7 +370,7 @@ main() {
     esac
   fi
 
-  upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type"
+  upload_file "$file_path" "$secret_word" "$(normalize_url "$url")" "$mime_type" "$copy_only"
   if [[ "$cmd" == "-" || "$cmd" == "upload" ]]; then
     rm -f "$file_path"
   fi
