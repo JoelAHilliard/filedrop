@@ -17,6 +17,12 @@ USAGE
   filedrop <file> [opts]                       same, shorthand
   filedrop - [opts]                            upload from stdin (pipes work)
   filedrop download <code> <secret> [opts]     fetch a shared file
+  filedrop --install                            copy this script onto PATH
+
+INSTALL ON A DIFFERENT MACHINE (super-easy)
+  curl -fsSL https://raw.githubusercontent.com/JoelAHilliard/filedrop/main/filedrop -o ~/.local/bin/filedrop \
+    && chmod +x ~/.local/bin/filedrop
+  (or run this file as: ./filedrop --install)   needs openssl, curl, python3
 
 UPLOAD OPTIONS
   --secret <word>    secret word for the download link (auto-picked if omitted)
@@ -255,6 +261,25 @@ download_file() {
 }
 
 main() {
+  if [[ "$1" == "--install" ]]; then
+    # Copy this script onto PATH. Works as `./filedrop --install` or a raw file.
+    local src="$0" here out
+    if [[ ! -f "$src" || "$src" == "bash" || "$src" == "sh" ]]; then
+      echo "Run ./filedrop --install from a checkout, or use the curl one-liner (see --help)." >&2
+      exit 1
+    fi
+    here="$HOME/.local/bin"
+    mkdir -p "$here"
+    out="$here/filedrop"
+    cp "$src" "$out" && chmod +x "$out"
+    case ":$PATH:" in
+      *":$here:"*) echo "Installed: $out (already on PATH)" ;;
+      "") ;;
+      *) echo "Installed: $out (not on PATH). Add: export PATH=\"$here:\$PATH\"" ;;
+    esac
+    exit 0
+  fi
+
   require_cmd openssl
   require_cmd curl
   require_cmd python3

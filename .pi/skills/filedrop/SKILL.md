@@ -19,11 +19,10 @@ AES-256; the server never sees plaintext. A share = one **access code** + one
 ## Setup (once, if `filedrop` is not on PATH)
 
 ```bash
-command -v filedrop >/dev/null && echo "installed" || {
-  R=/home/omarchy/Projects/filedrop   # repo checkout
-  mkdir -p ~/.local/bin
-  ln -s "$R/filedrop" ~/.local/bin/filedrop
-}
+# super-easy one-liner (any Linux/macOS with openssl/curl/python3):
+curl -fsSL https://raw.githubusercontent.com/JoelAHilliard/filedrop/main/filedrop -o ~/.local/bin/filedrop && chmod +x ~/.local/bin/filedrop
+# or from a checkout:
+./filedrop --install
 ```
 
 Needs `openssl`, `curl`, `python3`. No build step.
