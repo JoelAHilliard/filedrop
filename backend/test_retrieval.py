@@ -91,16 +91,17 @@ class RetrievalTest(unittest.TestCase):
         self.assertEqual(backend.s3_client.meta.config.read_timeout, 10)
 
         def inspect_request(request, **kwargs):
-            self.assertEqual(request.headers['Connection'], b'close')
+            self.assertEqual(request.headers['Connection'], 'close')
+            self.assertNotIn(b'connection', request.headers['Authorization'])
             raise RuntimeError('request inspected without network')
 
         events = backend.s3_client.meta.events
-        events.register('before-send.s3.PutObject', inspect_request)
+        events.register('before-send.s3', inspect_request)
         try:
             with self.assertRaisesRegex(RuntimeError, 'request inspected'):
                 backend.s3_client.put_object(Bucket='test', Key='test', Body=b'test')
         finally:
-            events.unregister('before-send.s3.PutObject', inspect_request)
+            events.unregister('before-send.s3', inspect_request)
 
     def test_storage_timeout_returns_504(self):
         with patch.object(backend.s3_client, 'get_object', side_effect=ReadTimeoutError(endpoint_url='http://localhost')):

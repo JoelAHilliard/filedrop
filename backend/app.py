@@ -42,7 +42,7 @@ def close_storage_connection(request, **kwargs):
     request.headers['Connection'] = 'close'
 
 
-s3_client.meta.events.register('before-sign.s3', close_storage_connection)
+s3_client.meta.events.register('before-send.s3', close_storage_connection)
 
 # Basic in-memory rate limiting (per IP, per endpoint)
 RATE_LIMIT_WINDOW_SECONDS = 60
