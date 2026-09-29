@@ -1,4 +1,5 @@
 import os
+from time import monotonic
 from flask import Flask, Response, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 import boto3
@@ -31,10 +32,17 @@ s3_client = boto3.client(
     config=Config(
         s3={'addressing_style': 'path'},
         connect_timeout=5,
-        read_timeout=60,
+        read_timeout=10,
         retries={'mode': 'standard', 'total_max_attempts': 3},
     )
 )
+
+def close_storage_connection(request, **kwargs):
+    # ponytail: avoid stale pooled R2 connections; costs a TLS handshake per request.
+    request.headers['Connection'] = 'close'
+
+
+s3_client.meta.events.register('before-sign.s3', close_storage_connection)
 
 # Basic in-memory rate limiting (per IP, per endpoint)
 RATE_LIMIT_WINDOW_SECONDS = 60
@@ -143,6 +151,7 @@ def request_too_large(_error):
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    started = monotonic()
     if not rate_limit_ok(rate_limit_uploads, UPLOAD_RATE_LIMIT):
         return jsonify({'error': 'Too many uploads from this IP. Please slow down.'}), 429
     
@@ -165,11 +174,12 @@ def upload_file():
     created_at = datetime.utcnow()
     expires_at = created_at + timedelta(seconds=ttl_seconds)
 
+    storage_started = monotonic()
     for _ in range(10):
         access_code = generate_access_code()
         file.stream.seek(0)
         try:
-            s3_client.put_object(
+            result = s3_client.put_object(
                 Bucket=os.getenv('S3_BUCKET_NAME'),
                 Key=access_code,
                 Body=file.stream,
@@ -195,6 +205,12 @@ def upload_file():
     else:
         return jsonify({'error': 'Could not allocate an access code. Please retry.'}), 503
     
+    print(
+        f"Upload completed: receive={storage_started - started:.3f}s "
+        f"storage={monotonic() - storage_started:.3f}s "
+        f"storage_retries={result.get('ResponseMetadata', {}).get('RetryAttempts', 0)}",
+        flush=True,
+    )
     return jsonify({
         'message': 'File uploaded successfully',
         'key': access_code,

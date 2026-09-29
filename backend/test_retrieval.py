@@ -87,6 +87,21 @@ class RetrievalTest(unittest.TestCase):
         backend.rate_limit_uploads['127.0.0.1'] = (datetime.now().timestamp(), backend.UPLOAD_RATE_LIMIT)
         self.assertEqual(client.post('/upload').status_code, 429)
 
+    def test_storage_requests_close_connections_and_bound_stalls(self):
+        self.assertEqual(backend.s3_client.meta.config.read_timeout, 10)
+
+        def inspect_request(request, **kwargs):
+            self.assertEqual(request.headers['Connection'], b'close')
+            raise RuntimeError('request inspected without network')
+
+        events = backend.s3_client.meta.events
+        events.register('before-send.s3.PutObject', inspect_request)
+        try:
+            with self.assertRaisesRegex(RuntimeError, 'request inspected'):
+                backend.s3_client.put_object(Bucket='test', Key='test', Body=b'test')
+        finally:
+            events.unregister('before-send.s3.PutObject', inspect_request)
+
     def test_storage_timeout_returns_504(self):
         with patch.object(backend.s3_client, 'get_object', side_effect=ReadTimeoutError(endpoint_url='http://localhost')):
             response = backend.app.test_client().get('/retrieve?accessCode=abc')
