@@ -78,5 +78,14 @@ module.exports = {
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [
+    require("tailwindcss-animate"),
+    // Size controls by input modality, not viewport width: touch devices get
+    // 44px targets at any width (phones, tablets, touch laptops), while
+    // mouse/trackpad devices keep the compact desktop sizing.
+    function ({ addVariant }) {
+      addVariant("fine", "@media (hover: hover) and (pointer: fine)");
+      addVariant("coarse", "@media (pointer: coarse)");
+    },
+  ],
 }
