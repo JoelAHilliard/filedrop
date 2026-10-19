@@ -234,7 +234,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label htmlFor="access-code" className="font-medium">Access Code</Label>
                             <Input 
@@ -243,6 +243,11 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 placeholder="e.g., a1b2"
                                 onChange={(e) => setTakenAccessCode(e.target.value)}
                                 className="font-mono"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellcheck={false}
+                                inputMode="text"
+                                enterKeyHint="next"
                             />
                         </div>
 
@@ -254,6 +259,16 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 placeholder="e.g., motion" 
                                 onChange={(e) => setTakenSecretWord(e.target.value)}
                                 className="font-mono"
+                                autoCapitalize="none"
+                                autoCorrect="off"
+                                spellcheck={false}
+                                inputMode="text"
+                                enterKeyHint="go"
+                                onKeyDown={(e: any) => {
+                                    if (e.key === 'Enter' && takenAccessCode && takenSecretWord) {
+                                        handleRetrieveFile();
+                                    }
+                                }}
                             />
                         </div>
                     </div>
@@ -264,6 +279,9 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                             value={fileBaseName}
                             placeholder="file"
                             onChange={(e) => setFileBaseName(normalizeFileBase((e.target as HTMLInputElement).value))}
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellcheck={false}
                         />
                         <p className="text-xs text-gray-500">
                             URLs are ignored and default to "file".
@@ -298,14 +316,15 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             {displayText !== "" && downloadComplete && (
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <CardTitle className="flex items-center gap-2">
-                                <FileText className="w-5 h-5" />
+                                <FileText className="w-5 h-5 shrink-0" />
                                 Retrieved Text
                             </CardTitle>
                             <Button
                                 size="sm"
                                 variant="outline"
+                                className="shrink-0"
                                 onClick={() => {
                                     navigator.clipboard.writeText(displayText);
                                     toast({ title: "Copied", description: "Text copied to clipboard" });
@@ -319,7 +338,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     <CardContent>
                         <Textarea
                             value={displayText}
-                            className="min-h-[300px] font-mono text-sm resize-none bg-gray-50 dark:bg-gray-900"
+                            className="min-h-[240px] sm:min-h-[300px] font-mono text-sm resize-y bg-gray-50 dark:bg-gray-900"
                             readOnly
                         />
                     </CardContent>
@@ -329,13 +348,14 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
             {downloadComplete && downloadedFileInfo && !downloadedFileInfo.isText && (
                 <Card>
                     <CardHeader>
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <CardTitle className="flex items-center gap-2">
-                                {previewKind === 'image' ? <ImageIcon className="w-5 h-5" /> : <File className="w-5 h-5" />}
+                                {previewKind === 'image' ? <ImageIcon className="w-5 h-5 shrink-0" /> : <File className="w-5 h-5 shrink-0" />}
                                 Preview
                             </CardTitle>
                             <Button
                                 size="sm"
+                                className="shrink-0"
                                 onClick={handleDownloadFile}
                                 disabled={!downloadUrl}
                             >
@@ -346,11 +366,11 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                     </CardHeader>
                     <CardContent className="space-y-3">
                         {previewKind === 'image' && downloadUrl && (
-                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-4">
+                            <div className="rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-2 sm:p-4">
                                 <img
                                     src={downloadUrl}
                                     alt={downloadedFileInfo.fileName}
-                                    className="max-h-[480px] w-full object-contain rounded-md"
+                                    className="max-h-[60vh] sm:max-h-[480px] w-full object-contain rounded-md"
                                 />
                             </div>
                         )}
@@ -359,19 +379,19 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 <iframe
                                     src={downloadUrl}
                                     title={downloadedFileInfo.fileName}
-                                    className="w-full h-[520px] bg-white"
+                                    className="w-full h-[60vh] sm:h-[520px] bg-white"
                                 />
                             </div>
                         )}
                         {previewKind === 'none' && (
-                            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-8 text-center space-y-2">
+                            <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-6 sm:p-8 text-center space-y-2">
                                 <File className="w-6 h-6 mx-auto text-gray-500" />
                                 <p className="text-sm text-gray-600 dark:text-gray-400">
                                     Preview not available for this file type.
                                 </p>
                             </div>
                         )}
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 break-anywhere">
                             {downloadedFileInfo.fileName} · {formatFileSize(downloadedFileInfo.size)}
                         </p>
                     </CardContent>
@@ -387,11 +407,11 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
                             <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
                                 <File className="w-4 h-4 mx-auto text-gray-600" />
                                 <p className="text-xs font-medium">File</p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
+                                <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-anywhere">
                                     {downloadedFileInfo.fileName}
                                 </p>
                             </div>
@@ -418,7 +438,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                             </div>
                         </div>
                         {(downloadedFileInfo.remainingDownloads !== undefined || downloadedFileInfo.expiresAt) && (
-                            <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-4">
                                 <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
                                     <Shield className="w-4 h-4 mx-auto text-gray-600" />
                                     <p className="text-xs font-medium">Downloads left</p>
@@ -429,7 +449,7 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
                                 <div className="text-center space-y-2 p-3 bg-gray-50 dark:bg-gray-900 rounded">
                                     <CheckCircle className="w-4 h-4 mx-auto text-gray-600" />
                                     <p className="text-xs font-medium">Expires</p>
-                                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                                    <p className="text-xs text-gray-600 dark:text-gray-400 break-anywhere">
                                         {downloadedFileInfo.expiresAt ? new Date(downloadedFileInfo.expiresAt).toLocaleString() : '—'}
                                     </p>
                                 </div>

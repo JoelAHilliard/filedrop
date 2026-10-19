@@ -31,10 +31,10 @@ export default function Home() {
     };
 
     return (
-        <div className="py-8">
+        <div className="py-4 sm:py-8">
             <div className="w-full">
                 <Tabs defaultValue={defaultTab || 'upload'} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-8">
+                    <TabsList className="grid w-full grid-cols-2 mb-4 sm:mb-8">
                         <TabsTrigger value="upload" className="flex items-center gap-2">
                             <Upload className="w-4 h-4" />
                             Upload

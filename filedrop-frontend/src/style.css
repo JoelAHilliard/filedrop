@@ -75,6 +75,13 @@
   * {
     @apply border-border;
   }
+  html {
+    /* Prevent pull-to-refresh */
+    overscroll-behavior: none;
+    /* Avoid iOS text auto-inflation in landscape */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     @apply bg-background text-foreground;
     /* iOS-like touch behaviors */
@@ -84,33 +91,75 @@
     overscroll-behavior: none;
     /* Prevent double-tap zoom */
     touch-action: manipulation;
+    /* Never allow sideways scrolling on small screens */
+    overflow-x: hidden;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
-  
+
   /* Allow text selection for inputs and text areas */
   input, textarea, [contenteditable] {
     -webkit-user-select: text;
     user-select: text;
   }
-  
-  /* Prevent pull-to-refresh */
-  html {
-    overscroll-behavior: none;
+
+  /* Long unbroken strings (access codes, file names, URLs) must wrap instead
+     of widening the layout on narrow screens. */
+  .break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
-  
-  /* iOS safe area support */
+}
+
+@layer utilities {
+  /* Minimum comfortable touch target (44px per Apple HIG / 48dp Android). */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Dynamic viewport height: avoids the mobile browser chrome jump. */
+  .h-dvh {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .min-h-dvh {
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* Hide scrollbars on horizontal chip/tab rows while keeping scrollability */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* iOS safe-area support. These live in the utilities layer so they win over
+     plain padding utilities, and each keeps a sane minimum inset on devices
+     without a notch (env() resolves to 0 there). */
   .safe-top {
-    padding-top: env(safe-area-inset-top);
+    padding-top: max(0.5rem, env(safe-area-inset-top));
   }
-  
+
   .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
   }
-  
+
   .safe-left {
-    padding-left: env(safe-area-inset-left);
+    padding-left: max(1rem, env(safe-area-inset-left));
   }
-  
+
   .safe-right {
-    padding-right: env(safe-area-inset-right);
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+
+  /* Combined horizontal safe-area padding for full-width containers */
+  .safe-x {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
   }
 }

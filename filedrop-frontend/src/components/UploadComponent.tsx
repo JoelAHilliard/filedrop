@@ -243,14 +243,15 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                         <CardTitle className="flex items-center gap-2">
-                            {uploadFile ? <File className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                            {uploadFile ? <File className="w-5 h-5 shrink-0" /> : <FileText className="w-5 h-5 shrink-0" />}
                             {uploadFile ? 'Upload File' : 'Upload Text'}
                         </CardTitle>
                         <Button 
                             variant="outline" 
                             size="sm" 
+                            className="shrink-0"
                             onClick={() => {
                                 setUploadFile(!uploadFile);
                                 // Reset upload state when switching modes
@@ -293,7 +294,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                         setFileSize(new TextEncoder().encode(e.target.value).length);
                                     }}
                                     placeholder="Enter your text here..."
-                                    className="min-h-[200px] resize-none"
+                                    className="min-h-[180px] sm:min-h-[200px] resize-y"
                                 />
                             </div>
                             {inputText && (
@@ -362,7 +363,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 checked={burnAfterRead}
                                 onCheckedChange={(value) => setBurnAfterRead(Boolean(value))}
                             />
-                            <Label htmlFor="burn-after-read" className="text-sm">
+                            <Label htmlFor="burn-after-read" className="text-sm cursor-pointer py-2">
                                 Burn after first download
                             </Label>
                         </div>
@@ -395,7 +396,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                     </Button>
                                     <button
                                         onClick={resetUpload}
-                                        className="w-full text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline"
+                                        className="w-full min-h-[44px] text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 underline"
                                     >
                                         Upload Another
                                     </button>
@@ -428,15 +429,17 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                             <div className="space-y-4">
                                 <div className="space-y-2">
                                     <Label className="font-medium">Access Code</Label>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-col gap-2 sm:flex-row">
                                         <Input 
                                             value={givenAccessCode} 
                                             readOnly 
-                                            className="font-mono"
+                                            className="font-mono break-anywhere"
                                         />
                                         <Button
                                             size="icon"
                                             variant="outline"
+                                            className="w-full shrink-0 sm:w-11"
+                                            aria-label="Copy access code"
                                             onClick={() => handleCopy(givenAccessCode, 'accessCode')}
                                         >
                                             <Copy className="w-4 h-4" />
@@ -446,27 +449,33 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
 
                                 <div className="space-y-2">
                                     <Label className="font-medium">Secret Word</Label>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-col gap-2 sm:flex-row">
                                         <Input 
                                             type={showSecretWord ? "text" : "password"}
                                             value={secretWord} 
                                             readOnly 
-                                            className="font-mono"
+                                            className="font-mono break-anywhere"
                                         />
-                                        <Button
-                                            size="icon"
-                                            variant="outline"
-                                            onClick={() => setShowSecretWord(!showSecretWord)}
-                                        >
-                                            {showSecretWord ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                        </Button>
-                                        <Button
-                                            size="icon"
-                                            variant="outline"
-                                            onClick={() => handleCopy(secretWord, 'secretWord')}
-                                        >
-                                            <Copy className="w-4 h-4" />
-                                        </Button>
+                                        <div className="flex gap-2 shrink-0">
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="flex-1 sm:flex-none"
+                                                aria-label={showSecretWord ? "Hide secret word" : "Show secret word"}
+                                                onClick={() => setShowSecretWord(!showSecretWord)}
+                                            >
+                                                {showSecretWord ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                            </Button>
+                                            <Button
+                                                size="icon"
+                                                variant="outline"
+                                                className="flex-1 sm:flex-none"
+                                                aria-label="Copy secret word"
+                                                onClick={() => handleCopy(secretWord, 'secretWord')}
+                                            >
+                                                <Copy className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -483,7 +492,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 </Button>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 gap-3 sm:gap-4">
                                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-center space-y-1">
                                     <DownloadIcon className="w-4 h-4 mx-auto text-gray-500" />
                                     <p className="text-xs font-medium">Max downloads</p>
@@ -492,13 +501,13 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 <div className="rounded-lg border border-gray-200 dark:border-gray-800 p-3 text-center space-y-1">
                                     <Timer className="w-4 h-4 mx-auto text-gray-500" />
                                     <p className="text-xs font-medium">Expires</p>
-                                    <p className="text-xs text-gray-500">
+                                    <p className="text-xs text-gray-500 break-anywhere">
                                         {expiresAt ? new Date(expiresAt).toLocaleString() : `${ttlHours} hours (max 3 days)`}
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="flex flex-col items-center justify-center space-y-4 bg-gray-50 dark:bg-gray-900 rounded-lg p-6">
+                            <div className="flex flex-col items-center justify-center space-y-4 bg-gray-50 dark:bg-gray-900 rounded-lg p-4 sm:p-6">
                                 <div className="bg-white p-3 rounded border">
                                     <QRCode 
                                         size={120} 
@@ -532,26 +541,32 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                        <div className="text-center space-y-2">
-                            <Shield className="w-6 h-6 mx-auto text-gray-600" />
-                            <h3 className="font-medium text-sm">AES-256 Encryption</h3>
-                            <p className="text-xs text-gray-500">
-                                End-to-end encryption
-                            </p>
+                        <div className="flex sm:flex-col items-center sm:text-center gap-3 sm:gap-2">
+                            <Shield className="w-6 h-6 shrink-0 text-gray-600" />
+                            <div className="min-w-0">
+                                <h3 className="font-medium text-sm">AES-256 Encryption</h3>
+                                <p className="text-xs text-gray-500">
+                                    End-to-end encryption
+                                </p>
+                            </div>
                         </div>
-                        <div className="text-center space-y-2">
-                            <Timer className="w-6 h-6 mx-auto text-gray-600" />
-                            <h3 className="font-medium text-sm">Custom TTL</h3>
-                            <p className="text-xs text-gray-500">
-                                Up to 3 days
-                            </p>
+                        <div className="flex sm:flex-col items-center sm:text-center gap-3 sm:gap-2">
+                            <Timer className="w-6 h-6 shrink-0 text-gray-600" />
+                            <div className="min-w-0">
+                                <h3 className="font-medium text-sm">Custom TTL</h3>
+                                <p className="text-xs text-gray-500">
+                                    Up to 3 days
+                                </p>
+                            </div>
                         </div>
-                        <div className="text-center space-y-2">
-                            <DownloadIcon className="w-6 h-6 mx-auto text-gray-600" />
-                            <h3 className="font-medium text-sm">Download Limits</h3>
-                            <p className="text-xs text-gray-500">
-                                Control access frequency
-                            </p>
+                        <div className="flex sm:flex-col items-center sm:text-center gap-3 sm:gap-2">
+                            <DownloadIcon className="w-6 h-6 shrink-0 text-gray-600" />
+                            <div className="min-w-0">
+                                <h3 className="font-medium text-sm">Download Limits</h3>
+                                <p className="text-xs text-gray-500">
+                                    Control access frequency
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </CardContent>

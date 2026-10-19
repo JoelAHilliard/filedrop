@@ -46,12 +46,12 @@ export const BeginnerPopup = () => {
                 The best solution for swift and uncomplicated file sharing between computers. Not for long-term storage.
             </DialogDescription>
           </DialogHeader>
-          <div class="w-[75%] mx-auto mt-10">
+          <div class="w-full sm:w-[75%] mx-auto mt-6 sm:mt-10 px-10 sm:px-0">
             <Carousel>
                 <CarouselContent>
-                    <CarouselItem className="text-xs flex items-center justify-center text-center font-bold">1. Upload any file under 500MB.</CarouselItem>
-                    <CarouselItem className="text-xs flex items-center justify-center text-center">2. Save your retrieval code (we can't get it back for you).</CarouselItem>
-                    <CarouselItem className="text-xs flex items-center justify-center text-center">3. Retrieve it before it expires (up to 3 days).</CarouselItem>
+                    <CarouselItem className="text-sm sm:text-xs flex items-center justify-center text-center font-bold min-h-[3rem]">1. Upload any file under 500MB.</CarouselItem>
+                    <CarouselItem className="text-sm sm:text-xs flex items-center justify-center text-center min-h-[3rem]">2. Save your retrieval code (we can't get it back for you).</CarouselItem>
+                    <CarouselItem className="text-sm sm:text-xs flex items-center justify-center text-center min-h-[3rem]">3. Retrieve it before it expires (up to 3 days).</CarouselItem>
                 </CarouselContent>
                 <CarouselPrevious />
                 <CarouselNext />
@@ -63,7 +63,7 @@ export const BeginnerPopup = () => {
                 checked={showAgain}
                 onCheckedChange={handleChange}
             />
-            <Label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70" htmlFor="showagain">Don't show again</Label>
+            <Label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer py-2" htmlFor="showagain">Don't show again</Label>
           </div>
         </DialogContent>
       </Dialog>
