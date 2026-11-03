@@ -23,6 +23,16 @@ class RetrievalTest(unittest.TestCase):
         backend.rate_limit_downloads.clear()
         backend.rate_limit_confirmations.clear()
 
+    def test_upload_accepts_ciphertext_without_a_secret(self):
+        with patch.object(backend.s3_client, 'put_object', return_value={}) as put:
+            response = backend.app.test_client().post('/upload', data={
+                'file': (io.BytesIO(b'encrypted'), 'file.bin'),
+                'iv': 'aXY=', 'salt': 'c2FsdA==',
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('secretWord', put.call_args.kwargs['Metadata'])
+        self.assertNotIn('secret_word', put.call_args.kwargs['Metadata'])
+
     def test_streams_in_chunks_and_closes_on_disconnect(self):
         class ChunkedBody(io.BytesIO):
             def read(self, size=-1):

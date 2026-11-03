@@ -23,7 +23,7 @@ export function App() {
 
 	useEffect(() => {
 		// Check if URL has access code and secret word parameters
-		const queryParams = new URLSearchParams(window.location.search);
+		const queryParams = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
 		const hasAccessCode = queryParams.get('ac');
 		const hasSecretWord = queryParams.get('sw');
 		
@@ -45,7 +45,7 @@ export function App() {
 						</div>
 					</div>
 
-					<div class="flex-grow bg-background w-full">
+					<div class="grow bg-background w-full">
 						<main class="max-w-4xl mx-auto w-full flex flex-col py-1 justify-between gap-2 px-4 safe-left safe-right">
 							<Router>
 								<Route path="/" component={Home} />

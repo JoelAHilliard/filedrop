@@ -12,11 +12,7 @@ import { encryptData, arrayBufferToBase64, str2ab, formatFileSize } from '@/util
 import FileDropZone from '@/components/FileDropZone';
 import { Checkbox } from '@/components/ui/checkbox';
 
-interface UploadComponentProps {
-    wordList: string[];
-}
-
-export default function UploadComponent({ wordList }: UploadComponentProps) {
+export default function UploadComponent() {
     const URL = "https://fd.up.railway.app";
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [givenAccessCode, setGivenAccessCode] = useState('');
@@ -71,18 +67,8 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
         setUploadStage('Encrypting...');
 
         try {
-        const index = Math.floor(Math.random() * wordList.length);
-        const sw = wordList[index]?.trim();
-        
-        if (!sw) {
-            toast({
-                title: "Error",
-                description: "Secret word not available.",
-                variant: "destructive"
-            });
-            setLoading(false);
-            return;
-        }
+        const sw = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+            byte => byte.toString(16).padStart(2, '0')).join('');
         
         if (!uploadFile) {
             if(inputText === ''){
@@ -104,7 +90,6 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             const formData = new FormData();
             formData.append('file', new Blob([encryptedBuffer]), 'file.txt');
             formData.append('type', 'text/plain');
-            formData.append('secretWord', sw);
             formData.append('iv', arrayBufferToBase64(iv));
             formData.append('salt', arrayBufferToBase64(salt));
             formData.append('maxDownloads', String(downloadsLimit));
@@ -176,7 +161,6 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
             const formData = new FormData();
             formData.append('file', new Blob([encryptedBuffer]), selectedFile.name);
             formData.append('type', selectedFile.type);
-            formData.append('secretWord', sw);
             formData.append('iv', arrayBufferToBase64(iv));
             formData.append('salt', arrayBufferToBase64(salt));
             formData.append('maxDownloads', String(downloadsLimit));
@@ -385,7 +369,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 <>
                                     <Button 
                                         onClick={() => {
-                                            const link = `${window.location.origin}/?ac=${givenAccessCode}&sw=${secretWord}`;
+                                            const link = `${window.location.origin}/#ac=${givenAccessCode}&sw=${secretWord}`;
                                             handleCopy(link, 'link');
                                         }}
                                         className="w-full"
@@ -474,7 +458,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                     variant="outline" 
                                     className="w-full"
                                     onClick={() => {
-                                        const link = `${window.location.origin}/?ac=${givenAccessCode}&sw=${secretWord}`;
+                                        const link = `${window.location.origin}/#ac=${givenAccessCode}&sw=${secretWord}`;
                                         handleCopy(link, 'link');
                                     }}
                                 >
@@ -502,7 +486,7 @@ export default function UploadComponent({ wordList }: UploadComponentProps) {
                                 <div className="bg-white p-3 rounded border">
                                     <QRCode 
                                         size={120} 
-                                        value={`${window.location.origin}/?ac=${givenAccessCode}&sw=${secretWord}`} 
+                                        value={`${window.location.origin}/#ac=${givenAccessCode}&sw=${secretWord}`}
                                     />
                                 </div>
                                 <p className="text-sm text-gray-600 dark:text-gray-400">
