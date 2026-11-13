@@ -10,6 +10,13 @@ A solution for swift and uncomplicated file sharing between computers. Designed 
 - **Download limits**: Control how many times a file can be downloaded
 - **Burn after read**: Option to auto-delete after first download
 
+The browser and CLI generate 128-bit random secrets by default and keep them on
+the client. Upload requests contain ciphertext, IV and salt, never the secret.
+New browser share links keep credentials in the URL fragment (`/#ac=…&sw=…`),
+which is not sent in page requests. Existing query-string links still open for
+compatibility. Analytics scripts are omitted from the transfer page.
+Explicit CLI `--secret` values should be long, unpredictable passphrases.
+
 ## Project Structure
 
 - `backend/` - Flask API server for file storage (uses Cloudflare R2)
@@ -58,7 +65,7 @@ copies; moving counts to a transactional store needs a separate migration.
 Tests:
 
 ```bash
-python -m unittest backend.test_retrieval -v
+python -m unittest backend.test_retrieval test_cli_security -v
 ```
 
 Browser regression check (with Chromium installed and `npm run dev` running):
@@ -70,6 +77,8 @@ NODE_PATH=/tmp/filedrop-browser/node_modules node filedrop-frontend/test-upload.
 ```
 
 ### Frontend
+
+Requires Node.js 20.19+ or 22.12+. The development server binds to localhost.
 
 ```bash
 cd filedrop-frontend

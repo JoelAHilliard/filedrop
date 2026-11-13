@@ -2,7 +2,6 @@
 set -euo pipefail
 
 DEFAULT_URL="https://fd.up.railway.app"
-WORDLIST_PATH="filedrop-frontend/public/bip39.txt"
 
 usage() {
   cat <<'EOF'
@@ -76,20 +75,10 @@ pick_secret_word() {
     echo "$explicit"
     return
   fi
-  if [[ -f "$WORDLIST_PATH" ]]; then
-    python3 - <<'PY' "$WORDLIST_PATH"
-import random, sys
-path = sys.argv[1]
-with open(path, 'r', encoding='utf-8') as f:
-    words = [w.strip() for w in f.read().splitlines() if w.strip()]
-print(random.choice(words) if words else "")
-PY
-  else
-    python3 - <<'PY'
+  python3 - <<'PYSECRET'
 import secrets
-print(secrets.token_hex(4))
-PY
-  fi
+print(secrets.token_hex(16))
+PYSECRET
 }
 
 hex_to_b64() {
@@ -155,7 +144,6 @@ upload_file() {
   if ! response=$(curl --connect-timeout 10 --max-time 1800 --speed-time 60 --speed-limit 1 -sS -w '\n%{http_code}' \
     -F "file=@${tmp_enc};filename=$(basename "$file_path")" \
     -F "type=${mime_type}" \
-    -F "secretWord=${secret_word}" \
     -F "iv=${iv_b64}" \
     -F "salt=${salt_b64}" \
     "${url}/upload"); then

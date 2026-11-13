@@ -159,16 +159,14 @@ def upload_file():
         return jsonify({'error': 'No file uploaded.'}), 400
     
     file = request.files['file']
-    # Although the secret word is sent, the server no longer uses it.
-    secret_word = request.form.get('secretWord')
     file_type = request.form.get('type')
     iv = request.form.get('iv')  # Provided from client (Base64)
     salt = request.form.get('salt')  # Provided from client (Base64)
     ttl_seconds = clamp_int(request.form.get('ttlSeconds'), DEFAULT_TTL_SECONDS, MIN_TTL_SECONDS, MAX_TTL_SECONDS)
     max_downloads = clamp_int(request.form.get('maxDownloads'), DEFAULT_MAX_DOWNLOADS, 1, MAX_DOWNLOADS_LIMIT)
     
-    if not file or not secret_word or not iv or not salt:
-        return jsonify({'error': 'Missing file, secret word, iv or salt'}), 400
+    if not file or not iv or not salt:
+        return jsonify({'error': 'Missing file, iv or salt'}), 400
     
     extension = secure_filename(file.filename).rsplit('.', 1)[-1] if '.' in file.filename else 'bin'
     created_at = datetime.utcnow()

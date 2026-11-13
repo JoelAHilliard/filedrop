@@ -212,6 +212,8 @@ export default function DownloadComponent({ initialAccessCode = '', initialSecre
 
     useEffect(() => {
         if (initialAccessCode && initialSecretWord) {
+            setTakenAccessCode(initialAccessCode);
+            setTakenSecretWord(initialSecretWord);
             handleRetrieveFile(initialAccessCode, initialSecretWord);
         }
     }, [initialAccessCode, initialSecretWord]);

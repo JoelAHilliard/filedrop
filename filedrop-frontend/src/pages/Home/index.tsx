@@ -5,36 +5,32 @@ import UploadComponent from '@/components/UploadComponent';
 import DownloadComponent from '@/components/DownloadComponent';
 
 export default function Home() {
-    const [wordList, setWordList] = useState<string[]>([]);
-    const [defaultTab, setDefaultTab] = useState(new URLSearchParams(window.location.search).get('ac') ? 'download' : 'upload');
+    const [defaultTab, setDefaultTab] = useState(new URLSearchParams(window.location.hash.slice(1) || window.location.search).get('ac') ? 'download' : 'upload');
     const [initialAccessCode, setInitialAccessCode] = useState('');
     const [initialSecretWord, setInitialSecretWord] = useState('');
 
     useEffect(() => {
         checkForURLCode();
-        fetch("/bip39.txt")
-            .then((response) => response.text())
-            .then((data) => {
-                const words = data.split("\n");
-                setWordList(words);
-            });
+        window.addEventListener('hashchange', checkForURLCode);
+        return () => window.removeEventListener('hashchange', checkForURLCode);
     }, []);
 
     const checkForURLCode = () => {
-        const queryParams = new URLSearchParams(window.location.search);
+        const queryParams = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
         const code = queryParams.get('ac');
         const sw = queryParams.get('sw');
         if (code && sw) {
+            setDefaultTab('download');
             setInitialAccessCode(code); 
             setInitialSecretWord(sw);
         }
     };
 
     return (
-        <div className="py-4 sm:py-8">
+        <div className="py-8">
             <div className="w-full">
-                <Tabs defaultValue={defaultTab || 'upload'} className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-4 sm:mb-8">
+                <Tabs value={defaultTab} onValueChange={setDefaultTab} className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 mb-8">
                         <TabsTrigger value="upload" className="flex items-center gap-2">
                             <Upload className="w-4 h-4" />
                             Upload
@@ -46,7 +42,7 @@ export default function Home() {
                     </TabsList>
 
                     <TabsContent value="upload">
-                        <UploadComponent wordList={wordList} />
+                        <UploadComponent />
                     </TabsContent>
 
                     <TabsContent value="download">
