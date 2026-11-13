@@ -4,9 +4,33 @@
 		<meta charset="UTF-8" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
-		<meta name="theme-color" content="#1f2937" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+		<link rel="manifest" href="/manifest.webmanifest" />
 
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<!-- viewport-fit=cover enables env(safe-area-inset-*) on notched devices -->
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+		<meta name="format-detection" content="telephone=no" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title" content="Filedrop" />
+
+		<!-- Browser chrome tint = header band colour. The script below applies the
+		     saved theme before first paint so dark-mode users don't get a light flash;
+		     theme-provider.tsx keeps both in sync afterwards. -->
+		<meta name="theme-color" content="#e7e6e4" />
+		<script>
+			(function () {
+				try {
+					var saved = localStorage.getItem('vite-ui-theme') || 'system';
+					var dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+					var root = document.documentElement;
+					root.classList.add(dark ? 'dark' : 'light');
+					root.style.colorScheme = dark ? 'dark' : 'light';
+					if (dark) document.querySelector('meta[name="theme-color"]').setAttribute('content', '#212327');
+				} catch (e) {}
+			})();
+		</script>
 
 		<!-- SEO Meta Tags -->
 		<title>Filedrop - Secure Encrypted File Transfer & Sharing</title>

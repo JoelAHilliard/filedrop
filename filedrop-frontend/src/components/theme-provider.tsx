@@ -13,6 +13,9 @@ const initialState: ThemeProviderState = {
   setTheme: () => null,
 }
 
+// Matches the header band (--muted) in each theme; keep in sync with index.html.
+const THEME_COLOR = { light: "#e7e6e4", dark: "#212327" } as const
+
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
 interface ThemeProviderProps {
@@ -36,20 +39,36 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = window.document.documentElement
+    const systemDark = window.matchMedia("(prefers-color-scheme: dark)")
 
-    root.classList.remove("light", "dark")
+    const apply = () => {
+      const resolved = theme === "system" ? (systemDark.matches ? "dark" : "light") : theme
+      if (root.classList.contains(resolved)) return
 
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light"
+      // A theme flip restyles nearly every element at once; let it snap
+      // instead of running every colour transition together.
+      const style = document.createElement("style")
+      style.textContent = "*,*::before,*::after{transition:none !important}"
+      document.head.appendChild(style)
 
-      root.classList.add(systemTheme)
-      return
+      root.classList.remove("light", "dark")
+      root.classList.add(resolved)
+      root.style.colorScheme = resolved
+
+      // The browser/status bar tint follows the chosen theme, not just the OS one.
+      document
+        .querySelectorAll('meta[name="theme-color"]')
+        .forEach((meta) => meta.setAttribute("content", THEME_COLOR[resolved]))
+
+      void root.offsetHeight // force a reflow so the swap happens untransitioned
+      requestAnimationFrame(() => style.remove())
     }
 
-    root.classList.add(theme)
+    apply()
+    if (theme !== "system") return
+
+    systemDark.addEventListener("change", apply)
+    return () => systemDark.removeEventListener("change", apply)
   }, [theme])
 
   const value: ThemeProviderState = {
