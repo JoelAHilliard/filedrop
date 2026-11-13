@@ -4,6 +4,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Horizontal page gutter that also clears notches / rounded corners in
+   landscape. Don't combine with px-* on the same element. */
+@utility safe-x {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+}
+
 @utility container {
   margin-inline: auto;
   padding-inline: 2rem;
@@ -165,94 +172,58 @@
 }
  
 @layer base {
+  :root {
+    /* Control heights follow the input device, not the viewport width:
+       44px+ targets for touch, compact sizing for mouse/trackpad. Components
+       read these, so a single override (e.g. className="h-8") still wins. */
+    --control-h: 2.75rem;
+    --control-h-sm: 2.5rem;
+    --control-h-lg: 3rem;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    :root {
+      --control-h: 2.5rem;
+      --control-h-sm: 2.25rem;
+      --control-h-lg: 2.75rem;
+    }
+  }
+
   * {
     @apply border-border;
   }
   html {
-    /* Prevent pull-to-refresh */
-    overscroll-behavior: none;
+    /* An accidental pull-to-refresh would throw away an in-progress upload or
+       the one-time codes shown after it. */
+    overscroll-behavior-y: none;
     /* Avoid iOS text auto-inflation in landscape */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
   body {
     @apply bg-background text-foreground;
-    /* iOS-like touch behaviors */
+    /* App-like touch behaviors */
     -webkit-user-select: none;
+    user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
-    overscroll-behavior: none;
     /* Prevent double-tap zoom */
     touch-action: manipulation;
-    /* Never allow sideways scrolling on small screens */
-    overflow-x: hidden;
-    min-height: 100vh;
-    min-height: 100dvh;
+    /* clip (not hidden) so the body never becomes a scroll container */
+    overflow-x: clip;
   }
 
-  /* Allow text selection for inputs and text areas */
-  input, textarea, [contenteditable] {
+  /* Allow text selection where people actually need to copy things */
+  input, textarea, output, [contenteditable] {
     -webkit-user-select: text;
     user-select: text;
   }
 
-  /* Long unbroken strings (access codes, file names, URLs) must wrap instead
-     of widening the layout on narrow screens. */
-  .break-anywhere {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
-}
-
-@layer utilities {
-  /* Minimum comfortable touch target (44px per Apple HIG / 48dp Android). */
-  .touch-target {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  /* Dynamic viewport height: avoids the mobile browser chrome jump. */
-  .h-dvh {
-    height: 100vh;
-    height: 100dvh;
-  }
-
-  .min-h-dvh {
-    min-height: 100vh;
-    min-height: 100dvh;
-  }
-
-  /* Hide scrollbars on horizontal chip/tab rows while keeping scrollability */
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* iOS safe-area support. These live in the utilities layer so they win over
-     plain padding utilities, and each keeps a sane minimum inset on devices
-     without a notch (env() resolves to 0 there). */
-  .safe-top {
-    padding-top: max(0.5rem, env(safe-area-inset-top));
-  }
-
-  .safe-bottom {
-    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
-  }
-
-  .safe-left {
-    padding-left: max(1rem, env(safe-area-inset-left));
-  }
-
-  .safe-right {
-    padding-right: max(1rem, env(safe-area-inset-right));
-  }
-
-  /* Combined horizontal safe-area padding for full-width containers */
-  .safe-x {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
+  @media (prefers-reduced-motion: reduce) {
+    *, ::before, ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

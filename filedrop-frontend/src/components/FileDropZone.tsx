@@ -1,125 +1,115 @@
 import { useCallback } from 'preact/hooks';
 import { useDropzone } from 'react-dropzone';
-import { Upload, File, X } from 'lucide-react';
+import { File, Upload, X } from 'lucide-react';
+import { formatFileSize as defaultFormatFileSize } from '@/utils/crypto';
+import { cn } from '@/lib/utils';
 
 interface FileDropZoneProps {
-  onChange: (files: File[]) => void;
-  resetKey?: number | string;
+  onChange?: (files: File[]) => void;
+  resetKey?: string | number;
   selectedFile?: File | null;
   onRemoveFile?: () => void;
   formatFileSize?: (bytes: number) => string;
+  disabled?: boolean;
 }
 
-const FileDropZone = ({ onChange, resetKey, selectedFile, onRemoveFile, formatFileSize }: FileDropZoneProps) => {
+const focusRing =
+  'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background';
+
+const FileDropZone = ({ onChange, resetKey, selectedFile, onRemoveFile, formatFileSize, disabled }: FileDropZoneProps) => {
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (onChange) {
-      onChange(acceptedFiles);
-    }
+    onChange?.(acceptedFiles);
   }, [onChange]);
 
+  // The drop target only handles drag events. Picking and removing are real
+  // <button>s inside it, so there is no button nested in a role="button".
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
     multiple: false,
-    noClick: true, // Disable default click behavior, we'll handle it manually
-    noKeyboard: false
+    noClick: true,
+    noKeyboard: true,
+    disabled,
   });
-
-  const inputProps = getInputProps();
-  const rootProps = getRootProps();
-
-  const defaultFormatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
 
   const fileSizeFormatter = formatFileSize || defaultFormatFileSize;
 
-  const handleClick = (e: MouseEvent) => {
-    // Don't open dialog if clicking on the remove button
-    if ((e.target as HTMLElement)?.closest('button[type="button"]')) {
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    open();
-  };
-
-  // Extract drag-related props and add our click handler
-  const { onClick: _, ...dragProps } = rootProps;
-
   return (
     <div
-      {...dragProps}
-      onClick={handleClick}
-      role="button"
-      tabIndex={0}
-      aria-label={selectedFile ? `Selected file ${selectedFile.name}. Tap to choose a different file.` : 'Choose a file to upload'}
-      className={`relative border-2 border-dashed rounded-lg p-4 sm:p-8 text-center min-h-[160px] sm:min-h-[200px] flex flex-col justify-center transition-all cursor-pointer active:bg-accent/40 ${
-        isDragActive
-          ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
-          : selectedFile
-          ? 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
-          : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400'
-      }`}
+      {...getRootProps()}
+      className={cn(
+        'rounded-lg border-2 border-dashed transition-colors duration-150',
+        isDragActive ? 'border-primary bg-accent' : 'border-input',
+        selectedFile && !isDragActive && 'border-solid bg-background',
+        disabled && 'opacity-60'
+      )}
     >
-      <input {...inputProps} key={resetKey} />
+      <input {...getInputProps()} key={resetKey} />
       {selectedFile ? (
-        <div className="space-y-3 sm:space-y-4">
-          <File className="w-10 h-10 sm:w-12 sm:h-12 mx-auto text-gray-500 dark:text-gray-400" />
-          <div className="space-y-2">
-            <p className="font-medium break-anywhere text-gray-900 dark:text-gray-100">
-              {selectedFile.name}
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {fileSizeFormatter(selectedFile.size)}
-            </p>
-          </div>
-          {isDragActive ? (
-            <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-              Drop a new file here to replace
-            </p>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="hidden sm:inline">Drag 'n' drop a new file here, or click to select</span>
-                <span className="sm:hidden">Tap to choose a different file</span>
-              </p>
-              {onRemoveFile && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveFile();
-                  }}
-                  className="mt-1 px-4 py-2.5 min-h-[44px] text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors flex items-center gap-1.5"
-                >
-                  <X className="w-4 h-4" />
-                  Remove File
-                </button>
+        <div className="flex items-center gap-1 p-1.5 sm:p-3">
+          <button
+            type="button"
+            onClick={open}
+            disabled={disabled}
+            className={cn(
+              'flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors duration-150 hover:bg-accent/60 active:bg-accent',
+              focusRing
+            )}
+          >
+            <File className="size-8 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden="true" />
+            <span className="min-w-0">
+              <span className="block line-clamp-2 font-medium wrap-anywhere">{selectedFile.name}</span>
+              <span className="block text-sm text-muted-foreground">
+                {fileSizeFormatter(selectedFile.size)}
+                <span aria-hidden="true"> · </span>
+                {isDragActive ? (
+                  'Drop to replace'
+                ) : (
+                  <>
+                    <span className="pointer-coarse:hidden">Click or drop to replace</span>
+                    <span className="hidden pointer-coarse:inline">Tap to replace</span>
+                  </>
+                )}
+              </span>
+            </span>
+          </button>
+          {onRemoveFile && (
+            <button
+              type="button"
+              onClick={onRemoveFile}
+              disabled={disabled}
+              aria-label={`Remove ${selectedFile.name}`}
+              className={cn(
+                'flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color,scale] duration-150 hover:bg-accent hover:text-foreground active:scale-[0.96] active:bg-accent',
+                focusRing
               )}
-            </div>
+            >
+              <X className="size-5" aria-hidden="true" />
+            </button>
           )}
         </div>
       ) : (
-        <div>
-          <Upload className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400 dark:text-gray-500" />
-          {isDragActive ? (
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400 font-medium">Drop the file here ...</p>
-          ) : (
-            <div className="mt-2 space-y-1">
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                <span className="hidden sm:inline">Drag 'n' drop a file here, or click to select</span>
-                <span className="sm:hidden">Tap to choose a file</span>
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Any file up to 500MB
-              </p>
-            </div>
+        <button
+          type="button"
+          onClick={open}
+          disabled={disabled}
+          className={cn(
+            'flex min-h-36 w-full flex-col items-center justify-center gap-1.5 rounded-md p-4 text-center transition-colors duration-150 hover:bg-accent/60 active:bg-accent sm:p-8 pointer-fine:min-h-48',
+            focusRing
           )}
-        </div>
+        >
+          <Upload className="mb-1 size-9 text-muted-foreground pointer-fine:size-11" strokeWidth={1.5} aria-hidden="true" />
+          <span className="font-medium">
+            {isDragActive ? (
+              'Drop the file here'
+            ) : (
+              <>
+                <span className="pointer-coarse:hidden">Drag and drop a file, or click to choose</span>
+                <span className="hidden pointer-coarse:inline">Choose a file</span>
+              </>
+            )}
+          </span>
+          <span className="text-sm text-muted-foreground">Any file up to 500MB</span>
+        </button>
       )}
     </div>
   );
