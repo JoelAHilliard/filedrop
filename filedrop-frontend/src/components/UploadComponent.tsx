@@ -67,8 +67,9 @@ export default function UploadComponent() {
         setUploadStage('Encrypting...');
 
         try {
-        const sw = Array.from(crypto.getRandomValues(new Uint8Array(16)),
-            byte => byte.toString(16).padStart(2, '0')).join('');
+        const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const sw = Array.from(crypto.getRandomValues(new Uint8Array(6)),
+            byte => alphabet[byte & 31]).join('');
         
         if (!uploadFile) {
             if(inputText === ''){

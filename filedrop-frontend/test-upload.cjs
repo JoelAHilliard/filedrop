@@ -40,7 +40,7 @@ const { chromium } = require('playwright-core');
         await page.getByRole('button', { name: 'Upload Another', exact: true }).waitFor();
         assert.equal(uploads, 1);
         const secret = await page.locator('input[type=password][readonly]').inputValue();
-        assert.match(secret, /^[a-f0-9]{32}$/);
+        assert.match(secret, /^[A-HJ-NP-Z2-9]{6}$/);
         await page.getByRole('button', { name: 'Copy Share Link', exact: true }).first().click();
         const shareLink = await page.evaluate(() => navigator.clipboard.readText());
         assert.equal(new URL(shareLink).search, '');
@@ -66,6 +66,8 @@ const { chromium } = require('playwright-core');
         await page.getByRole('button', { name: 'Upload File', exact: true }).click();
         await page.getByRole('button', { name: 'Upload Another', exact: true }).waitFor();
         assert.equal(uploads, 2);
+        const fileSecret = await page.locator('input[type=password][readonly]').inputValue();
+        assert.match(fileSecret, /^[A-HJ-NP-Z2-9]{6}$/);
 
         await page.unroute('https://fd.up.railway.app/**');
         await page.route('https://fd.up.railway.app/**', route => {
